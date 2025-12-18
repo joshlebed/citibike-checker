@@ -1,0 +1,42 @@
+{
+  "users": {
+    "josh": {
+      "api_key": "sk_josh_REPLACE_WITH_RANDOM_STRING",
+      "default_profile": "work",
+      "profiles": {
+        "work": [
+          {
+            "id": "2af3ecc3-4f43-468a-a7cc-bb4804ee3e7a",
+            "nickname": "43rd and Madison"
+          },
+          {
+            "id": "66dc8025-0aca-11e7-82f6-3863bb44ef7c",
+            "nickname": "grand central n"
+          },
+          {
+            "id": "66dc7f02-0aca-11e7-82f6-3863bb44ef7c",
+            "nickname": "grand central s"
+          }
+        ],
+        "home": [
+          {
+            "id": "STATION_UUID_HERE",
+            "nickname": "my corner"
+          }
+        ]
+      }
+    },
+    "alice": {
+      "api_key": "sk_alice_REPLACE_WITH_RANDOM_STRING",
+      "default_profile": "office",
+      "profiles": {
+        "office": [
+          {
+            "id": "STATION_UUID_HERE",
+            "nickname": "downtown"
+          }
+        ]
+      }
+    }
+  }
+}

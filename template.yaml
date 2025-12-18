@@ -1,0 +1,68 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: AWS::Serverless-2016-10-31
+Description: Citi Bike station availability checker
+
+Globals:
+  Function:
+    Runtime: python3.11
+    Timeout: 10
+    MemorySize: 256
+    Architectures:
+      - arm64
+
+Resources:
+  CitibikeApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      StageName: prod
+      Cors:
+        AllowMethods: "'GET,OPTIONS'"
+        AllowHeaders: "'Content-Type,X-API-Key'"
+        AllowOrigin: "'*'"
+
+  CitibikeCheckFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: lambda_app.handler.citibike_check
+      CodeUri: src/
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Environment:
+        Variables:
+          GBFS_TIMEOUT_S: "8"
+      Events:
+        GetCitibikeCheck:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CitibikeApi
+            Path: /citibike-check
+            Method: GET
+
+  CitibikeCheckEnglishFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: lambda_app.handler.citibike_check_english
+      CodeUri: src/
+      Policies:
+        - AWSLambdaBasicExecutionRole
+      Environment:
+        Variables:
+          GBFS_TIMEOUT_S: "8"
+      Events:
+        GetCitibikeCheckEnglish:
+          Type: Api
+          Properties:
+            RestApiId: !Ref CitibikeApi
+            Path: /citibike-check-english
+            Method: GET
+
+Outputs:
+  ApiBaseUrl:
+    Description: Base URL for the API Gateway stage
+    Value: !Sub "https://${CitibikeApi}.execute-api.${AWS::Region}.amazonaws.com/prod"
+  CitibikeCheckEndpoint:
+    Description: JSON endpoint
+    Value: !Sub "https://${CitibikeApi}.execute-api.${AWS::Region}.amazonaws.com/prod/citibike-check"
+  CitibikeCheckEnglishEndpoint:
+    Description: English endpoint
+    Value: !Sub "https://${CitibikeApi}.execute-api.${AWS::Region}.amazonaws.com/prod/citibike-check-english"
