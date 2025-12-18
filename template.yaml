@@ -20,6 +20,19 @@ Resources:
         AllowHeaders: "'Content-Type,X-API-Key'"
         AllowOrigin: "'*'"
 
+  # Log groups with retention policy
+  CitibikeCheckLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${CitibikeCheckFunction}
+      RetentionInDays: 14
+
+  CitibikeCheckEnglishLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${CitibikeCheckEnglishFunction}
+      RetentionInDays: 14
+
   CitibikeCheckFunction:
     Type: AWS::Serverless::Function
     Properties:
@@ -55,6 +68,41 @@ Resources:
             RestApiId: !Ref CitibikeApi
             Path: /citibike-check-english
             Method: GET
+
+  # CloudWatch Alarms for errors
+  CitibikeCheckErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: citibike-checker-json-errors
+      AlarmDescription: Errors in CitibikeCheckFunction
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref CitibikeCheckFunction
+      TreatMissingData: notBreaching
+
+  CitibikeCheckEnglishErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: citibike-checker-english-errors
+      AlarmDescription: Errors in CitibikeCheckEnglishFunction
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref CitibikeCheckEnglishFunction
+      TreatMissingData: notBreaching
 
 Outputs:
   ApiBaseUrl:
