@@ -4,6 +4,15 @@ set -euo pipefail
 STACK_NAME="${STACK_NAME:-citibike-checker}"
 REGION="${AWS_REGION:-us-east-1}"
 
+# Copy config.json to src/ so it gets packaged with Lambda
+if [ -f config.json ]; then
+  cp config.json src/config.json
+  echo "Copied config.json to src/"
+else
+  echo "ERROR: config.json not found. Copy config.example.json to config.json and configure it."
+  exit 1
+fi
+
 sam build --use-container
 sam deploy \
   --stack-name "$STACK_NAME" \

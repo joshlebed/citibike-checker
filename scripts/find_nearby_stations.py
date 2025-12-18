@@ -115,7 +115,7 @@ def create_map(target_station: dict, nearby_stations: list[dict], output_path: P
 
 if __name__ == "__main__":
     target_station_id = "66dc7f02-0aca-11e7-82f6-3863bb44ef7c"
-    max_distance = 0.1
+    max_distance = 0.2
 
     target_station, nearby_stations = find_nearby_stations(target_station_id, max_distance_miles=max_distance)
 

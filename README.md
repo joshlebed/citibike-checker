@@ -1,6 +1,6 @@
 # citibike-checker
 
-Check Citi Bike dock and bike availability at configured stations.
+Check Citi Bike dock and bike availability at configured stations with smart priority-based reporting.
 
 ## Setup
 
@@ -17,9 +17,48 @@ All user configuration lives in `config.json` (not in version control). See `con
 Each user has:
 - **api_key**: Unique key for API authentication (you create these)
 - **default_profile**: Which profile to use when none specified
-- **profiles**: Named location groups (e.g., "work", "home")
+- **profiles**: Named location profiles (e.g., "work", "home")
 
-Example:
+### Profile Structure
+
+Profiles are arrays of station entries, ordered by preference. Each entry can be:
+
+**Single station:**
+```json
+{"name": "43rd and Madison", "id": "station-uuid", "primary": true}
+```
+
+**Group of stations** (e.g., two stations right next to each other):
+```json
+{
+  "name": "grand central",
+  "primary": true,
+  "stations": [
+    {"id": "station-uuid-1", "name": "north"},
+    {"id": "station-uuid-2", "name": "south"}
+  ]
+}
+```
+
+### Primary vs Backup
+
+- `"primary": true` - Always reported
+- No `primary` flag - Only reported if total primary availability ≤3
+
+### Smart Reporting Logic
+
+**Docks:**
+- Primary entries always shown
+- If primary total ≤3 docks, backup entries also shown
+- Groups collapse to total if first station has availability; expand if first is empty
+
+**Bikes:**
+- E-bikes prioritized over classic bikes
+- If primary e-bikes <3, also report classic bikes and backup stations
+- Same group collapsing logic as docks
+
+### Example Config
+
 ```json
 {
   "users": {
@@ -28,11 +67,26 @@ Example:
       "default_profile": "work",
       "profiles": {
         "work": [
-          {"id": "station-uuid", "nickname": "43rd and Madison"},
-          {"id": "station-uuid", "nickname": "grand central"}
-        ],
-        "home": [
-          {"id": "station-uuid", "nickname": "my corner"}
+          {
+            "name": "43rd and Madison",
+            "id": "2af3ecc3-4f43-468a-a7cc-bb4804ee3e7a",
+            "primary": true
+          },
+          {
+            "name": "grand central",
+            "primary": true,
+            "stations": [
+              {"id": "66dc8025-0aca-11e7-82f6-3863bb44ef7c", "name": "north"},
+              {"id": "66dc7f02-0aca-11e7-82f6-3863bb44ef7c", "name": "south"}
+            ]
+          },
+          {
+            "name": "40th",
+            "stations": [
+              {"id": "c638ec67-9ac0-416f-944f-619926144931", "name": "east"},
+              {"id": "2098359443836787630", "name": "west"}
+            ]
+          }
         ]
       }
     }
@@ -40,13 +94,11 @@ Example:
 }
 ```
 
-Generate API keys however you like (e.g., `openssl rand -hex 24`).
+Generate API keys: `openssl rand -hex 24`
 
 ## Finding Station IDs
 
 A local copy of all Citi Bike stations is in `data/stations.json` (2300+ stations, sorted by name).
-
-To find a station ID:
 
 ```bash
 # Search by street name
@@ -56,13 +108,7 @@ grep -i "42 st" data/stations.json
 jq '.[] | select(.name | test("42 St"; "i")) | {name, station_id}' data/stations.json
 ```
 
-Each station entry includes:
-- `station_id` - UUID to use in config
-- `name` - Human-readable location (e.g., "Park Ave & E 42 St")
-- `capacity` - Total docks at station
-- `lat`, `lon` - Coordinates
-
-To refresh the station list (stations occasionally change):
+To refresh the station list:
 
 ```bash
 ./scripts/refresh_stations.sh
@@ -70,53 +116,34 @@ To refresh the station list (stations occasionally change):
 
 ## API Endpoints
 
-### `/citibike-check` (JSON)
+### `/citibike-check-english` (Plain text for Siri)
 
-Returns station counts as JSON.
-
-Headers:
-- `X-API-Key`: Your API key from config.json (required)
-
-Query params:
-- `q`: Natural language query (e.g., "how many docks at work") - parses profile and type
-- `profile`: Profile name (default: user's default) - overrides q
-- `type`: `docks` or `bikes` (default: `docks`) - overrides q
+Returns a human-readable sentence.
 
 ```bash
-# Using explicit params
-curl -sS "https://YOUR_API_URL/prod/citibike-check?type=bikes" \
-  -H "X-API-Key: YOUR_API_KEY"
-
-# Using natural language q param
-curl -sS "https://YOUR_API_URL/prod/citibike-check?q=bikes%20at%20work" \
-  -H "X-API-Key: YOUR_API_KEY"
-```
-
-### `/citibike-check-english` (Plain text)
-
-Returns a human-readable sentence. Supports the same query params as above.
-
-```bash
-# Docks (default)
 curl -sS "https://YOUR_API_URL/prod/citibike-check-english" \
   -H "X-API-Key: YOUR_API_KEY"
-# Output: 53 docks at 43rd and Madison, 148 docks at grand central
+# Output: 10 at 43rd and Madison, 27 at grand central docks
 
-# Bikes (with e-bike breakdown)
 curl -sS "https://YOUR_API_URL/prod/citibike-check-english?type=bikes" \
   -H "X-API-Key: YOUR_API_KEY"
-# Output: 0 ebikes and 0 classic at 43rd and Madison, 9 ebikes and 0 classic at grand central
-
-# Natural language
-curl -sS "https://YOUR_API_URL/prod/citibike-check-english?q=how%20many%20docks%20at%20work" \
-  -H "X-API-Key: YOUR_API_KEY"
+# Output: 5 ebikes at 43rd and Madison, 8 ebikes at grand central
 ```
+
+### `/citibike-check` (JSON)
+
+Returns structured JSON with station data.
+
+Query params:
+- `q`: Natural language query (e.g., "docks at work", "bikes at home")
+- `profile`: Profile name (overrides q)
+- `type`: `docks` or `bikes` (overrides q)
 
 ## Siri Shortcut Setup
 
 Create one Shortcut named "Citi bike" with these actions:
 
-1. **Dictate Text** - Prompt: "What do you want?"
+1. **Dictate Text** - Stop listening: After Short Pause
 2. **Get Contents of URL**:
    - URL: `https://YOUR_API_URL/prod/citibike-check-english`
    - Method: GET
@@ -126,30 +153,16 @@ Create one Shortcut named "Citi bike" with these actions:
 
 Usage:
 - "Hey Siri, Citi bike"
-- Siri: "What do you want?"
-- You: "How many docks at work?" or "Bikes at work?"
+- Siri: (listens)
+- You: "docks at work" or "bikes at work"
 
 ## Deploy to AWS Lambda
 
 Prerequisites:
 - AWS SAM CLI (`brew install aws-sam-cli`)
 - Docker (for building)
-- AWS credentials configured (`aws sso login --profile josh-personal`)
-- `config.json` configured with users and API keys
-
-Build and deploy:
-
-```bash
-sam build --use-container
-AWS_PROFILE=josh-personal sam deploy \
-  --stack-name citibike-checker \
-  --region us-east-1 \
-  --capabilities CAPABILITY_IAM \
-  --resolve-s3 \
-  --no-confirm-changeset
-```
-
-Or use the deploy script:
+- AWS credentials configured
+- `config.json` configured
 
 ```bash
 AWS_PROFILE=josh-personal ./deploy.sh

@@ -19,6 +19,7 @@ ENV/
 
 # User config (keep config.example.json)
 config.json
+src/config.json
 
 # Generated files
 *.html
