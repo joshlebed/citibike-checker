@@ -1,8 +1,13 @@
 import json
+import logging
 import os
 from dataclasses import dataclass
 from citibike_parking.gbfs import compute_parking_summary
 from lambda_app.config import get_user_by_api_key, get_all_station_ids
+
+# Configure logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
 
 
 # Threshold: if primary availability is at or below this, also show backups
@@ -382,18 +387,26 @@ def _unauthorized_response(content_type: str = "application/json"):
 
 def citibike_check(event, context):
     """Returns JSON with station counts."""
+    logger.info("citibike_check called")
+    logger.info(f"Query params: {event.get('queryStringParameters')}")
+
     api_key = _get_api_key(event)
     if not api_key:
+        logger.warning("Request missing API key")
         return _unauthorized_response()
 
     user = get_user_by_api_key(api_key)
     if not user:
+        logger.warning("Invalid API key provided")
         return _unauthorized_response()
+
+    logger.info(f"Authenticated user: {user.get('name', 'unknown')}")
 
     profiles = user["profiles"]
     default_profile = user["default_profile"]
 
     profile_name, count_type = _resolve_params(event, list(profiles.keys()), default_profile)
+    logger.info(f"Resolved params - profile: {profile_name}, type: {count_type}")
 
     if count_type not in ("docks", "bikes"):
         return {
@@ -420,8 +433,10 @@ def citibike_check(event, context):
             data = _format_bikes_json(entries)
 
         data["profile"] = profile_name
+        logger.info(f"Response: {json.dumps(data)}")
 
     except Exception as e:
+        logger.error(f"Error processing request: {e}", exc_info=True)
         return {
             "statusCode": 500,
             "headers": {"content-type": "application/json"},
@@ -440,18 +455,26 @@ def citibike_check(event, context):
 
 def citibike_check_english(event, context):
     """Returns English sentence describing station counts."""
+    logger.info("citibike_check_english called")
+    logger.info(f"Query params: {event.get('queryStringParameters')}")
+
     api_key = _get_api_key(event)
     if not api_key:
+        logger.warning("Request missing API key")
         return _unauthorized_response("text/plain")
 
     user = get_user_by_api_key(api_key)
     if not user:
+        logger.warning("Invalid API key provided")
         return _unauthorized_response("text/plain")
+
+    logger.info(f"Authenticated user: {user.get('name', 'unknown')}")
 
     profiles = user["profiles"]
     default_profile = user["default_profile"]
 
     profile_name, count_type = _resolve_params(event, list(profiles.keys()), default_profile)
+    logger.info(f"Resolved params - profile: {profile_name}, type: {count_type}")
 
     if count_type not in ("docks", "bikes"):
         return {
@@ -477,7 +500,10 @@ def citibike_check_english(event, context):
         else:
             message = _format_bikes_english(entries)
 
+        logger.info(f"Response: {message}")
+
     except Exception as e:
+        logger.error(f"Error processing request: {e}", exc_info=True)
         return {
             "statusCode": 500,
             "headers": {"content-type": "text/plain"},
