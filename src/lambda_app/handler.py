@@ -235,21 +235,21 @@ def _format_docks_english(entries: list[EntryResult]) -> str:
     for entry in entries_to_report:
         if not entry.is_group:
             # Single station
-            parts.append(f"{entry.total_docks} at {entry.name}")
+            parts.append(f"{entry.total_docks} docks at {entry.name}")
         else:
             # Group
             if entry.first_has_docks:
                 # First station has docks - report group total
-                parts.append(f"{entry.total_docks} at {entry.name}")
+                parts.append(f"{entry.total_docks} docks at {entry.name}")
             else:
                 # First station empty - report each individually
                 for station in entry.stations:
-                    parts.append(f"{station.docks} at {entry.name} {station.name}")
+                    parts.append(f"{station.docks} docks at {entry.name} {station.name}")
 
     if not parts:
         return "No stations configured"
 
-    return ", ".join(parts) + " docks"
+    return ", ".join(parts)
 
 
 def _format_bikes_english(entries: list[EntryResult]) -> str:
