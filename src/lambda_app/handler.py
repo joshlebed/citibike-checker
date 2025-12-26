@@ -2,8 +2,9 @@ import json
 import logging
 import os
 from dataclasses import dataclass
+
 from citibike_parking.gbfs import compute_parking_summary
-from lambda_app.config import get_user_by_api_key, get_all_station_ids
+from lambda_app.config import get_all_station_ids, get_user_by_api_key
 
 # Configure logging
 logger = logging.getLogger()
@@ -17,6 +18,7 @@ LOW_AVAILABILITY_THRESHOLD = 3
 @dataclass
 class StationData:
     """Data for a single station."""
+
     id: str
     name: str
     docks: int
@@ -31,6 +33,7 @@ class StationData:
 @dataclass
 class EntryResult:
     """Processed result for a config entry (single station or group)."""
+
     name: str
     is_primary: bool
     is_group: bool
@@ -73,9 +76,33 @@ def _get_query_param(event, param, default=None):
     return params.get(param, default)
 
 
-def _parse_natural_query(q: str, profile_names: list[str], default_profile: str) -> tuple[str, str]:
+def _get_body_param(event, param, default=None):
+    """Extract parameter from JSON body (for POST requests)."""
+    body = event.get("body")
+    if not body:
+        return default
+    try:
+        parsed = json.loads(body)
+        return parsed.get(param, default)
+    except (json.JSONDecodeError, TypeError):
+        return default
+
+
+def _get_param(event, param, default=None):
+    """Extract parameter from query string or JSON body."""
+    # Check query string first, then body
+    value = _get_query_param(event, param)
+    if value is not None:
+        return value
+    return _get_body_param(event, param, default)
+
+
+def _parse_natural_query(
+    q: str, profile_names: list[str], default_profile: str
+) -> tuple[str, str]:
     """Parse natural language query to extract profile and type."""
     q_lower = q.lower()
+    logger.info(f"Parsing query: '{q_lower}', available profiles: {profile_names}")
 
     if "bike" in q_lower:
         count_type = "bikes"
@@ -87,6 +114,7 @@ def _parse_natural_query(q: str, profile_names: list[str], default_profile: str)
     profile = default_profile
     for profile_name in profile_names:
         if profile_name.lower() in q_lower:
+            logger.info(f"Matched profile '{profile_name}' in query")
             profile = profile_name
             break
 
@@ -126,7 +154,9 @@ def _fetch_station_data(profile: list) -> dict[str, StationData]:
     }
 
 
-def _process_profile(profile: list, station_data: dict[str, StationData]) -> list[EntryResult]:
+def _process_profile(
+    profile: list, station_data: dict[str, StationData]
+) -> list[EntryResult]:
     """
     Process a profile configuration into EntryResults with real-time data.
     """
@@ -139,39 +169,47 @@ def _process_profile(profile: list, station_data: dict[str, StationData]) -> lis
             # Single station
             data = station_data.get(entry["id"])
             if data:
-                results.append(EntryResult(
-                    name=entry["name"],
-                    is_primary=is_primary,
-                    is_group=False,
-                    stations=[StationData(
-                        id=entry["id"],
+                results.append(
+                    EntryResult(
                         name=entry["name"],
-                        docks=data.docks,
-                        ebikes=data.ebikes,
-                        classic=data.classic,
-                    )],
-                ))
+                        is_primary=is_primary,
+                        is_group=False,
+                        stations=[
+                            StationData(
+                                id=entry["id"],
+                                name=entry["name"],
+                                docks=data.docks,
+                                ebikes=data.ebikes,
+                                classic=data.classic,
+                            )
+                        ],
+                    )
+                )
         elif "stations" in entry:
             # Group of stations
             group_stations = []
             for station in entry["stations"]:
                 data = station_data.get(station["id"])
                 if data:
-                    group_stations.append(StationData(
-                        id=station["id"],
-                        name=station["name"],
-                        docks=data.docks,
-                        ebikes=data.ebikes,
-                        classic=data.classic,
-                    ))
+                    group_stations.append(
+                        StationData(
+                            id=station["id"],
+                            name=station["name"],
+                            docks=data.docks,
+                            ebikes=data.ebikes,
+                            classic=data.classic,
+                        )
+                    )
 
             if group_stations:
-                results.append(EntryResult(
-                    name=entry["name"],
-                    is_primary=is_primary,
-                    is_group=True,
-                    stations=group_stations,
-                ))
+                results.append(
+                    EntryResult(
+                        name=entry["name"],
+                        is_primary=is_primary,
+                        is_group=True,
+                        stations=group_stations,
+                    )
+                )
 
     return results
 
@@ -246,7 +284,9 @@ def _format_bikes_english(entries: list[EntryResult]) -> str:
                 parts.append(f"{entry.total_ebikes} ebikes at {entry.name}")
             else:
                 for station in entry.stations:
-                    parts.append(f"{station.ebikes} ebikes at {entry.name} {station.name}")
+                    parts.append(
+                        f"{station.ebikes} ebikes at {entry.name} {station.name}"
+                    )
 
     # If low e-bikes, also report classic
     if include_classic:
@@ -280,26 +320,32 @@ def _format_docks_json(entries: list[EntryResult]) -> dict:
     stations = []
     for entry in entries_to_report:
         if not entry.is_group:
-            stations.append({
-                "name": entry.name,
-                "docks": entry.total_docks,
-                "primary": entry.is_primary,
-            })
-        else:
-            if entry.first_has_docks:
-                stations.append({
+            stations.append(
+                {
                     "name": entry.name,
                     "docks": entry.total_docks,
                     "primary": entry.is_primary,
-                    "collapsed": True,
-                })
+                }
+            )
+        else:
+            if entry.first_has_docks:
+                stations.append(
+                    {
+                        "name": entry.name,
+                        "docks": entry.total_docks,
+                        "primary": entry.is_primary,
+                        "collapsed": True,
+                    }
+                )
             else:
                 for station in entry.stations:
-                    stations.append({
-                        "name": f"{entry.name} {station.name}",
-                        "docks": station.docks,
-                        "primary": entry.is_primary,
-                    })
+                    stations.append(
+                        {
+                            "name": f"{entry.name} {station.name}",
+                            "docks": station.docks,
+                            "primary": entry.is_primary,
+                        }
+                    )
 
     return {
         "type": "docks",
@@ -322,29 +368,35 @@ def _format_bikes_json(entries: list[EntryResult]) -> dict:
     stations = []
     for entry in entries_to_report:
         if not entry.is_group:
-            stations.append({
-                "name": entry.name,
-                "ebikes": entry.total_ebikes,
-                "classic": entry.total_classic,
-                "primary": entry.is_primary,
-            })
-        else:
-            if entry.first_has_ebikes:
-                stations.append({
+            stations.append(
+                {
                     "name": entry.name,
                     "ebikes": entry.total_ebikes,
                     "classic": entry.total_classic,
                     "primary": entry.is_primary,
-                    "collapsed": True,
-                })
+                }
+            )
+        else:
+            if entry.first_has_ebikes:
+                stations.append(
+                    {
+                        "name": entry.name,
+                        "ebikes": entry.total_ebikes,
+                        "classic": entry.total_classic,
+                        "primary": entry.is_primary,
+                        "collapsed": True,
+                    }
+                )
             else:
                 for station in entry.stations:
-                    stations.append({
-                        "name": f"{entry.name} {station.name}",
-                        "ebikes": station.ebikes,
-                        "classic": station.classic,
-                        "primary": entry.is_primary,
-                    })
+                    stations.append(
+                        {
+                            "name": f"{entry.name} {station.name}",
+                            "ebikes": station.ebikes,
+                            "classic": station.classic,
+                            "primary": entry.is_primary,
+                        }
+                    )
 
     return {
         "type": "bikes",
@@ -356,16 +408,18 @@ def _format_bikes_json(entries: list[EntryResult]) -> dict:
 
 
 def _resolve_params(event, profile_names: list[str], default_profile: str):
-    """Resolve profile and type from query params."""
-    q = _get_query_param(event, "q")
+    """Resolve profile and type from query params or JSON body."""
+    q = _get_param(event, "q")
 
     if q:
-        parsed_profile, parsed_type = _parse_natural_query(q, profile_names, default_profile)
+        parsed_profile, parsed_type = _parse_natural_query(
+            q, profile_names, default_profile
+        )
     else:
         parsed_profile, parsed_type = default_profile, "docks"
 
-    profile = _get_query_param(event, "profile") or parsed_profile
-    count_type = _get_query_param(event, "type") or parsed_type
+    profile = _get_param(event, "profile") or parsed_profile
+    count_type = _get_param(event, "type") or parsed_type
 
     return profile, count_type
 
@@ -405,7 +459,9 @@ def citibike_check(event, context):
     profiles = user["profiles"]
     default_profile = user["default_profile"]
 
-    profile_name, count_type = _resolve_params(event, list(profiles.keys()), default_profile)
+    profile_name, count_type = _resolve_params(
+        event, list(profiles.keys()), default_profile
+    )
     logger.info(f"Resolved params - profile: {profile_name}, type: {count_type}")
 
     if count_type not in ("docks", "bikes"):
@@ -420,7 +476,11 @@ def citibike_check(event, context):
         return {
             "statusCode": 400,
             "headers": {"content-type": "application/json"},
-            "body": json.dumps({"error": f"Unknown profile: {profile_name}. Available: {list(profiles.keys())}"}),
+            "body": json.dumps(
+                {
+                    "error": f"Unknown profile: {profile_name}. Available: {list(profiles.keys())}"
+                }
+            ),
         }
 
     try:
@@ -456,7 +516,9 @@ def citibike_check(event, context):
 def citibike_check_english(event, context):
     """Returns English sentence describing station counts."""
     logger.info("citibike_check_english called")
-    logger.info(f"Query params: {event.get('queryStringParameters')}")
+    logger.info(
+        f"Method: {event.get('httpMethod')}, Query params: {event.get('queryStringParameters')}, Body: {event.get('body')}"
+    )
 
     api_key = _get_api_key(event)
     if not api_key:
@@ -473,7 +535,9 @@ def citibike_check_english(event, context):
     profiles = user["profiles"]
     default_profile = user["default_profile"]
 
-    profile_name, count_type = _resolve_params(event, list(profiles.keys()), default_profile)
+    profile_name, count_type = _resolve_params(
+        event, list(profiles.keys()), default_profile
+    )
     logger.info(f"Resolved params - profile: {profile_name}, type: {count_type}")
 
     if count_type not in ("docks", "bikes"):
