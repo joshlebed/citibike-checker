@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Find stations within 1 mile of a target station and plot them on a map."""
+"""Find stations within a given radius of a target station and plot them on a map."""
 
+import argparse
 import json
 import math
 from pathlib import Path
@@ -17,14 +18,18 @@ def haversine_distance(lat1: float, lon1: float, lat2: float, lon2: float) -> fl
     delta_lat = math.radians(lat2 - lat1)
     delta_lon = math.radians(lon2 - lon1)
 
-    a = math.sin(delta_lat / 2) ** 2 + \
-        math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(delta_lon / 2) ** 2
+    a = (
+        math.sin(delta_lat / 2) ** 2
+        + math.cos(lat1_rad) * math.cos(lat2_rad) * math.sin(delta_lon / 2) ** 2
+    )
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
     return R * c
 
 
-def find_nearby_stations(target_id: str, max_distance_miles: float = 1.0) -> tuple[dict, list[dict]]:
+def find_nearby_stations(
+    target_id: str, max_distance_miles: float = 1.0
+) -> tuple[dict, list[dict]]:
     """Find all stations within max_distance_miles of the target station.
 
     Returns:
@@ -38,7 +43,10 @@ def find_nearby_stations(target_id: str, max_distance_miles: float = 1.0) -> tup
     # Find the target station
     target_station = None
     for station in stations:
-        if station.get("station_id") == target_id or station.get("external_id") == target_id:
+        if (
+            station.get("station_id") == target_id
+            or station.get("external_id") == target_id
+        ):
             target_station = station
             break
 
@@ -55,22 +63,26 @@ def find_nearby_stations(target_id: str, max_distance_miles: float = 1.0) -> tup
     # Find nearby stations
     nearby = []
     for station in stations:
-        if station.get("station_id") == target_id or station.get("external_id") == target_id:
+        if (
+            station.get("station_id") == target_id
+            or station.get("external_id") == target_id
+        ):
             continue  # Skip the target station itself
 
         distance = haversine_distance(
-            target_lat, target_lon,
-            station["lat"], station["lon"]
+            target_lat, target_lon, station["lat"], station["lon"]
         )
 
         if distance <= max_distance_miles:
-            nearby.append({
-                "station_id": station.get("station_id"),
-                "name": station["name"],
-                "lat": station["lat"],
-                "lon": station["lon"],
-                "distance_miles": round(distance, 3)
-            })
+            nearby.append(
+                {
+                    "station_id": station.get("station_id"),
+                    "name": station["name"],
+                    "lat": station["lat"],
+                    "lon": station["lon"],
+                    "distance_miles": round(distance, 3),
+                }
+            )
 
     # Sort by distance
     nearby.sort(key=lambda x: x["distance_miles"])
@@ -78,21 +90,24 @@ def find_nearby_stations(target_id: str, max_distance_miles: float = 1.0) -> tup
     return target_station, nearby
 
 
-def create_map(target_station: dict, nearby_stations: list[dict], output_path: Path) -> None:
+def create_map(
+    target_station: dict, nearby_stations: list[dict], output_path: Path
+) -> None:
     """Create an interactive map with the target and nearby stations."""
     # Center map on target station
     m = folium.Map(
         location=[target_station["lat"], target_station["lon"]],
         zoom_start=15,
-        tiles="OpenStreetMap"
+        tiles="OpenStreetMap",
     )
 
     # Add target station marker (red)
+    target_id = target_station.get("station_id") or target_station.get("external_id")
     folium.Marker(
         location=[target_station["lat"], target_station["lon"]],
         popup=folium.Popup(
-            f"<b>{target_station['name']}</b><br>Target Station",
-            max_width=300
+            f"<b>{target_station['name']}</b><br>ID: {target_id}<br>Target Station",
+            max_width=300,
         ),
         icon=folium.Icon(color="red", icon="star"),
     ).add_to(m)
@@ -102,8 +117,8 @@ def create_map(target_station: dict, nearby_stations: list[dict], output_path: P
         folium.Marker(
             location=[station["lat"], station["lon"]],
             popup=folium.Popup(
-                f"<b>{station['name']}</b><br>Distance: {station['distance_miles']} miles",
-                max_width=300
+                f"<b>{station['name']}</b><br>ID: {station['station_id']}<br>Distance: {station['distance_miles']} miles",
+                max_width=300,
             ),
             icon=folium.Icon(color="blue", icon="info-sign"),
         ).add_to(m)
@@ -114,17 +129,30 @@ def create_map(target_station: dict, nearby_stations: list[dict], output_path: P
 
 
 if __name__ == "__main__":
-    target_station_id = "66dc7f02-0aca-11e7-82f6-3863bb44ef7c"
-    max_distance = 0.2
+    parser = argparse.ArgumentParser(
+        description="Find stations within a given radius of a target station"
+    )
+    parser.add_argument("station_id", help="Target station ID")
+    parser.add_argument(
+        "--radius",
+        type=float,
+        default=0.5,
+        help="Search radius in miles (default: 0.5)",
+    )
+    args = parser.parse_args()
 
-    target_station, nearby_stations = find_nearby_stations(target_station_id, max_distance_miles=max_distance)
+    target_station, nearby_stations = find_nearby_stations(
+        args.station_id, max_distance_miles=args.radius
+    )
 
-    print(f"Found {len(nearby_stations)} stations within {max_distance} mile(s):\n")
+    print(f"Found {len(nearby_stations)} stations within {args.radius} mile(s):\n")
     print(f"{'Distance':<10} {'Name':<50} {'Station ID'}")
     print("-" * 100)
 
     for station in nearby_stations:
-        print(f"{station['distance_miles']:<10} {station['name']:<50} {station['station_id']}")
+        print(
+            f"{station['distance_miles']:<10} {station['name']:<50} {station['station_id']}"
+        )
 
     # Create and save map
     output_path = Path(__file__).parent.parent / "nearby_stations_map.html"

@@ -16,7 +16,7 @@ Resources:
     Properties:
       StageName: prod
       Cors:
-        AllowMethods: "'GET,OPTIONS'"
+        AllowMethods: "'GET,POST,OPTIONS'"
         AllowHeaders: "'Content-Type,X-API-Key'"
         AllowOrigin: "'*'"
 
@@ -62,12 +62,12 @@ Resources:
         Variables:
           GBFS_TIMEOUT_S: "8"
       Events:
-        GetCitibikeCheckEnglish:
+        PostCitibikeCheckEnglish:
           Type: Api
           Properties:
             RestApiId: !Ref CitibikeApi
             Path: /citibike-check-english
-            Method: GET
+            Method: POST
 
   # CloudWatch Alarms for errors
   CitibikeCheckErrorAlarm:
