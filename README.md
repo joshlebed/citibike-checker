@@ -182,7 +182,7 @@ Prerequisites:
 - `config.json` configured
 
 ```bash
-AWS_PROFILE=josh-personal ./deploy.sh
+./deploy.sh
 ```
 
 The API URL will be shown in the deployment output.
@@ -191,7 +191,7 @@ The API URL will be shown in the deployment output.
 
 1. Generate an API key: `openssl rand -hex 24`
 2. Add the user to `config.json` with their stations
-3. Deploy: `AWS_PROFILE=josh-personal ./deploy.sh`
+3. Deploy: `./deploy.sh`
 4. Share the API key and API URL with the user
 
 ## AWS Operations
@@ -202,10 +202,10 @@ All AWS commands require the profile prefix: `AWS_PROFILE=josh-personal`
 
 ```bash
 # Login via SSO (required when token expires)
-AWS_PROFILE=josh-personal aws sso login
+aws sso login
 
 # Verify authentication
-AWS_PROFILE=josh-personal aws sts get-caller-identity
+aws sts get-caller-identity
 ```
 
 ### Viewing CloudWatch Logs
@@ -217,24 +217,24 @@ Lambda functions log to CloudWatch. Log groups:
 
 ```bash
 # List log groups
-AWS_PROFILE=josh-personal aws logs describe-log-groups \
+aws logs describe-log-groups \
   --log-group-name-prefix "/aws/lambda/citibike" \
   --query 'logGroups[*].logGroupName' --output text
 
 # View recent logs (last hour) for the English endpoint
-AWS_PROFILE=josh-personal aws logs tail \
+aws logs tail \
   "/aws/lambda/citibike-checker-CitibikeCheckEnglishFunction-1IF6TcSAgNb1" \
   --since 1h
 
 # View logs from a specific date (use epoch milliseconds)
 # Get epoch: python3 -c "import datetime; print(int(datetime.datetime(2025, 12, 25).timestamp() * 1000))"
-AWS_PROFILE=josh-personal aws logs filter-log-events \
+aws logs filter-log-events \
   --log-group-name "/aws/lambda/citibike-checker-CitibikeCheckEnglishFunction-1IF6TcSAgNb1" \
   --start-time 1735102800000 \
   --query 'events[*].[timestamp,message]' --output text
 
 # Follow logs in real-time
-AWS_PROFILE=josh-personal aws logs tail \
+aws logs tail \
   "/aws/lambda/citibike-checker-CitibikeCheckEnglishFunction-1IF6TcSAgNb1" \
   --follow
 ```
@@ -243,11 +243,11 @@ AWS_PROFILE=josh-personal aws logs tail \
 
 ```bash
 # Build and deploy
-AWS_PROFILE=josh-personal ./deploy.sh
+./deploy.sh
 
 # Or manually with SAM
-AWS_PROFILE=josh-personal sam build
-AWS_PROFILE=josh-personal sam deploy
+sam build
+sam deploy
 ```
 
 The deploy script handles building and deploying. The API URL is shown in the output.
