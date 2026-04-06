@@ -270,7 +270,7 @@ function renderSidebar() {
     html += '<div class="group-container" data-group-id="' + group.id + '">';
     html += '<div class="group-header">';
     html += '<span class="toggle-arrow" onclick="toggleGroupExpand(this)">[+]</span>';
-    html += '<input class="group-name-input" type="text" value="' + escapeAttr(group.name) + '" onchange="updateGroupName(\'' + escapeAttr(group.id) + '\', this.value)" />';
+    html += '<input class="group-name-input" type="text" data-group-id="' + escapeAttr(group.id) + '" value="' + escapeAttr(group.name) + '" onchange="updateGroupName(\'' + escapeAttr(group.id) + '\', this.value)" />';
     html += '<label><input type="checkbox" ' + (group.primary ? 'checked' : '') + ' onchange="toggleGroupPrimary(\'' + escapeAttr(group.id) + '\', this.checked)" /> Primary</label>';
     html += '<button class="btn-remove" onclick="removeGroup(\'' + escapeAttr(group.id) + '\')" title="Remove group">x</button>';
     html += '</div>';
@@ -365,20 +365,27 @@ function updateGroupButton() {
 document.getElementById('btn-group').addEventListener('click', () => {
   const checks = document.querySelectorAll('.station-check:checked');
   if (checks.length < 2) return;
-  const name = prompt('Enter a name for this group:');
-  if (!name) return;
 
   const memberIds = [];
   checks.forEach(cb => memberIds.push(cb.dataset.id));
 
+  // Use the first member's name as default group name
+  const firstMember = selectedStations.find(s => s.id === memberIds[0]);
+  const defaultName = firstMember ? firstMember.displayName : 'New Group';
+
+  const groupId = 'group-' + Date.now();
   groups.push({
-    id: 'group-' + Date.now(),
-    name: name,
+    id: groupId,
+    name: defaultName,
     memberIds: memberIds,
     primary: false
   });
 
   renderSidebar();
+
+  // Focus the group name input so user can rename it
+  const nameInput = document.querySelector('[data-group-id="' + groupId + '"]');
+  if (nameInput) { nameInput.select(); nameInput.focus(); }
 });
 
 // Generate config
