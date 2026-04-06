@@ -411,8 +411,8 @@ def citibike_check(event, context):
     body = _get_body(event)
     profile = body.get("profile")
 
-    if not profile:
-        return _bad_request("profile is required", "application/json")
+    if not profile or not isinstance(profile, list):
+        return _bad_request("profile is required and must be an array", "application/json")
 
     count_type = _resolve_type(body)
 
@@ -452,8 +452,8 @@ def citibike_check_english(event, context):
     body = _get_body(event)
     profile = body.get("profile")
 
-    if not profile:
-        return _bad_request("profile is required", "text/plain")
+    if not profile or not isinstance(profile, list):
+        return _bad_request("profile is required and must be an array", "text/plain")
 
     count_type = _resolve_type(body)
 
