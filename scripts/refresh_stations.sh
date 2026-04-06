@@ -24,3 +24,7 @@ print(json.dumps(stations, indent=2))
 
 COUNT=$(python3 -c "import json; print(len(json.load(open('$OUTPUT_FILE'))))")
 echo "Saved $COUNT stations to data/stations.json"
+
+# Also build the slim version for the web app
+echo "Building slim stations.json for web app..."
+python3 "$(dirname "$0")/build_stations_web.py"
