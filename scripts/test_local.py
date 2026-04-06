@@ -6,6 +6,7 @@ Usage:
     uv run scripts/test_local.py
     uv run scripts/test_local.py --type bikes
     uv run scripts/test_local.py --profile work --type docks
+    uv run scripts/test_local.py --profile-file josh-profiles.json --profile work
 """
 
 import argparse
@@ -17,49 +18,46 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from lambda_app.handler import citibike_check, citibike_check_english
-from lambda_app.config import get_config
 
 
-def make_event(api_key: str, query_params: dict = None) -> dict:
-    """Create a mock API Gateway event."""
-    return {
-        "headers": {"X-API-Key": api_key},
-        "queryStringParameters": query_params or {},
-    }
+def make_event(profile: list, q: str = None, count_type: str = None) -> dict:
+    """Create a mock API Gateway event with profile in body."""
+    body = {"profile": profile}
+    if q:
+        body["q"] = q
+    if count_type:
+        body["type"] = count_type
+    return {"headers": {}, "body": json.dumps(body)}
 
 
 def main():
     parser = argparse.ArgumentParser(description="Test Lambda handlers locally")
-    parser.add_argument("--profile", default=None, help="Profile name")
+    parser.add_argument("--profile-file", default="josh-profiles.json", help="Path to profiles JSON file")
+    parser.add_argument("--profile", default="work", help="Profile name")
     parser.add_argument("--type", default="docks", choices=["docks", "bikes"], help="Type")
     parser.add_argument("--q", default=None, help="Natural language query")
     parser.add_argument("--json", action="store_true", help="Use JSON endpoint")
-    parser.add_argument("--user", default="josh", help="User from config")
     args = parser.parse_args()
 
-    # Get API key for user
-    config = get_config()
-    user_config = config["users"].get(args.user)
-    if not user_config:
-        print(f"Error: User '{args.user}' not found in config.json")
-        print(f"Available users: {list(config['users'].keys())}")
+    # Read profiles file
+    profiles_path = Path(args.profile_file)
+    if not profiles_path.exists():
+        print(f"Error: {args.profile_file} not found")
         sys.exit(1)
 
-    api_key = user_config["api_key"]
+    with open(profiles_path) as f:
+        profiles = json.load(f)
 
-    # Build query params
-    params = {}
-    if args.profile:
-        params["profile"] = args.profile
-    if args.type:
-        params["type"] = args.type
-    if args.q:
-        params["q"] = args.q
+    profile = profiles.get(args.profile)
+    if not profile:
+        print(f"Error: Profile '{args.profile}' not found")
+        print(f"Available profiles: {list(profiles.keys())}")
+        sys.exit(1)
 
-    event = make_event(api_key, params)
+    event = make_event(profile, q=args.q, count_type=args.type)
 
-    print(f"Testing with user: {args.user}")
-    print(f"Query params: {params}")
+    print(f"Testing with profile: {args.profile}")
+    print(f"Body params: type={args.type}, q={args.q}")
     print("-" * 50)
 
     if args.json:

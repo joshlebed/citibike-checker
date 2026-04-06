@@ -11,7 +11,7 @@ import argparse
 import json
 import sys
 from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 from dataclasses import dataclass
 
 # Add src to path
@@ -42,39 +42,17 @@ class MockParkingSummary:
     ttl_seconds: int = 60
 
 
-# Test config with known station IDs
-TEST_CONFIG = {
-    "users": {
-        "test": {
-            "api_key": "test_key",
-            "default_profile": "work",
-            "profiles": {
-                "work": [
-                    {
-                        "name": "43rd and Madison",
-                        "id": "station-43rd",
-                        "primary": True
-                    },
-                    {
-                        "name": "grand central",
-                        "primary": True,
-                        "stations": [
-                            {"id": "station-gc-north", "name": "north"},
-                            {"id": "station-gc-south", "name": "south"}
-                        ]
-                    },
-                    {
-                        "name": "40th",
-                        "stations": [
-                            {"id": "station-40th-east", "name": "east"},
-                            {"id": "station-40th-west", "name": "west"}
-                        ]
-                    }
-                ]
-            }
-        }
-    }
-}
+TEST_PROFILE = [
+    {"name": "43rd and Madison", "id": "station-43rd", "primary": True},
+    {"name": "grand central", "primary": True, "stations": [
+        {"id": "station-gc-north", "name": "north"},
+        {"id": "station-gc-south", "name": "south"},
+    ]},
+    {"name": "40th", "stations": [
+        {"id": "station-40th-east", "name": "east"},
+        {"id": "station-40th-west", "name": "west"},
+    ]},
+]
 
 
 def make_mock_summary(station_data: dict) -> MockParkingSummary:
@@ -106,45 +84,41 @@ def make_mock_summary(station_data: dict) -> MockParkingSummary:
     )
 
 
+def make_event(count_type: str) -> dict:
+    body = {"profile": TEST_PROFILE, "type": count_type}
+    return {"headers": {}, "body": json.dumps(body)}
+
+
 def run_test(name: str, station_data: dict, count_type: str, expected_contains: list, verbose: bool = False):
     """Run a single test case."""
-    # Import here to allow patching
     from lambda_app.handler import citibike_check_english, citibike_check
-    from lambda_app import config as config_module
 
-    # Mock the config
-    with patch.object(config_module, '_CONFIG', TEST_CONFIG):
-        with patch.object(config_module, 'get_config', return_value=TEST_CONFIG):
-            # Mock the GBFS call
-            mock_summary = make_mock_summary(station_data)
-            with patch('lambda_app.handler.compute_parking_summary', return_value=mock_summary):
-                event = {
-                    "headers": {"X-API-Key": "test_key"},
-                    "queryStringParameters": {"type": count_type},
-                }
+    mock_summary = make_mock_summary(station_data)
+    with patch("lambda_app.handler.compute_parking_summary", return_value=mock_summary):
+        event = make_event(count_type)
 
-                # Get English response
-                response = citibike_check_english(event, None)
-                body = response["body"]
+        # Get English response
+        response = citibike_check_english(event, None)
+        body = response["body"]
 
-                # Get JSON response for verbose output
-                json_response = citibike_check(event, None)
-                json_body = json.loads(json_response["body"])
+        # Get JSON response for verbose output
+        json_response = citibike_check(event, None)
+        json_body = json.loads(json_response["body"])
 
-                # Check expectations
-                passed = all(exp in body for exp in expected_contains)
-                status = "✓" if passed else "✗"
+        # Check expectations
+        passed = all(exp in body for exp in expected_contains)
+        status = "✓" if passed else "✗"
 
-                print(f"{status} {name}")
-                if verbose or not passed:
-                    print(f"  Input: {station_data}")
-                    print(f"  Output: {body}")
-                    if not passed:
-                        print(f"  Expected to contain: {expected_contains}")
-                    print(f"  JSON: {json.dumps(json_body, indent=4)}")
-                    print()
+        print(f"{status} {name}")
+        if verbose or not passed:
+            print(f"  Input: {station_data}")
+            print(f"  Output: {body}")
+            if not passed:
+                print(f"  Expected to contain: {expected_contains}")
+            print(f"  JSON: {json.dumps(json_body, indent=4)}")
+            print()
 
-                return passed
+        return passed
 
 
 def main():
@@ -169,7 +143,7 @@ def main():
             "station-40th-west": {"docks": 5},
         },
         "docks",
-        ["10 at 43rd", "27 at grand central", "docks"],
+        ["10 docks at 43rd and Madison", "27 docks at grand central"],
         args.verbose
     ))
 
@@ -184,7 +158,7 @@ def main():
             "station-40th-west": {"docks": 5},
         },
         "docks",
-        ["10 at 43rd", "0 at grand central north", "12 at grand central south"],
+        ["10 docks at 43rd and Madison", "0 docks at grand central north", "12 docks at grand central south"],
         args.verbose
     ))
 
@@ -199,7 +173,7 @@ def main():
             "station-40th-west": {"docks": 5},
         },
         "docks",
-        ["1 at 43rd", "2 at grand central", "13 at 40th"],
+        ["1 docks at 43rd and Madison", "2 docks at grand central", "13 docks at 40th"],
         args.verbose
     ))
 
@@ -214,7 +188,7 @@ def main():
             "station-40th-west": {"docks": 5},
         },
         "docks",
-        ["0 at 43rd", "0 at grand central", "13 at 40th"],
+        ["0 docks at 43rd and Madison", "0 docks at grand central", "13 docks at 40th"],
         args.verbose
     ))
 
@@ -229,7 +203,7 @@ def main():
             "station-40th-west": {"docks": 0},
         },
         "docks",
-        ["0 at 43rd", "0 at grand central", "0 at 40th"],
+        ["0 docks at 43rd and Madison", "0 docks at grand central", "0 docks at 40th"],
         args.verbose
     ))
 
@@ -249,7 +223,7 @@ def main():
             "station-40th-west": {"ebikes": 2, "classic": 4},
         },
         "bikes",
-        ["5 ebikes at 43rd", "12 ebikes at grand central"],
+        ["5 ebikes at 43rd and Madison", "12 ebikes at grand central"],
         args.verbose
     ))
 
@@ -264,7 +238,7 @@ def main():
             "station-40th-west": {"ebikes": 2, "classic": 4},
         },
         "bikes",
-        ["5 ebikes at 43rd", "0 ebikes at grand central north", "4 ebikes at grand central south"],
+        ["5 ebikes at 43rd and Madison", "0 ebikes at grand central north", "4 ebikes at grand central south"],
         args.verbose
     ))
 
@@ -279,7 +253,7 @@ def main():
             "station-40th-west": {"ebikes": 2, "classic": 4},
         },
         "bikes",
-        ["1 ebikes at 43rd", "1 ebikes at grand central", "classic", "40th"],
+        ["1 ebikes at 43rd and Madison", "1 ebikes at grand central", "classic", "40th"],
         args.verbose
     ))
 
@@ -294,7 +268,7 @@ def main():
             "station-40th-west": {"ebikes": 0, "classic": 4},
         },
         "bikes",
-        ["0 ebikes at 43rd", "0 ebikes at grand central", "classic"],
+        ["0 ebikes at 43rd and Madison", "0 ebikes at grand central", "classic"],
         args.verbose
     ))
 
