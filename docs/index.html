@@ -135,7 +135,6 @@ let selectedStations = []; // { id, name, displayName, primary, marker }
 let groups = []; // { id, name, memberIds: [], primary }
 let markerMap = {}; // stationId -> marker
 
-const defaultIcon = L.circleMarker([0, 0], { radius: 5, color: '#1976d2', fillColor: '#1976d2', fillOpacity: 0.7, weight: 1 });
 const selectedColor = '#43a047';
 const defaultColor = '#1976d2';
 
@@ -172,7 +171,11 @@ fetch('stations.json')
       markerMap[station.id] = marker;
     });
   })
-  .catch(err => console.error('Failed to load stations:', err));
+  .catch(err => {
+    console.error('Failed to load stations:', err);
+    const list = document.getElementById('station-list');
+    list.innerHTML = '<div style="color:red;padding:16px;font-size:14px;">Failed to load station data. Please refresh the page.</div>';
+  });
 
 function openPopup(marker, station) {
   const isSelected = selectedStations.some(s => s.id === station.id);
@@ -184,7 +187,7 @@ function openPopup(marker, station) {
       '<div style="min-width:180px">' +
       '<strong>' + escapeHtml(station.name) + '</strong><br>' +
       '<span style="font-size:11px;color:#666">ID: ' + escapeHtml(station.id) + '</span><br>' +
-      '<button onclick="toggleStation(\'' + station.id + '\')" style="margin-top:6px;padding:4px 10px;border:1px solid #ccc;border-radius:3px;cursor:pointer;background:white;font-size:12px;' + btnClass + '">' + btnLabel + '</button>' +
+      '<button onclick="toggleStation(\'' + escapeAttr(station.id) + '\')" style="margin-top:6px;padding:4px 10px;border:1px solid #ccc;border-radius:3px;cursor:pointer;background:white;font-size:12px;' + btnClass + '">' + btnLabel + '</button>' +
       '</div>'
     )
     .openOn(map);
@@ -267,9 +270,9 @@ function renderSidebar() {
     html += '<div class="group-container" data-group-id="' + group.id + '">';
     html += '<div class="group-header">';
     html += '<span class="toggle-arrow" onclick="toggleGroupExpand(this)">[+]</span>';
-    html += '<input class="group-name-input" type="text" value="' + escapeAttr(group.name) + '" onchange="updateGroupName(\'' + group.id + '\', this.value)" />';
-    html += '<label><input type="checkbox" ' + (group.primary ? 'checked' : '') + ' onchange="toggleGroupPrimary(\'' + group.id + '\', this.checked)" /> Primary</label>';
-    html += '<button class="btn-remove" onclick="removeGroup(\'' + group.id + '\')" title="Remove group">x</button>';
+    html += '<input class="group-name-input" type="text" value="' + escapeAttr(group.name) + '" onchange="updateGroupName(\'' + escapeAttr(group.id) + '\', this.value)" />';
+    html += '<label><input type="checkbox" ' + (group.primary ? 'checked' : '') + ' onchange="toggleGroupPrimary(\'' + escapeAttr(group.id) + '\', this.checked)" /> Primary</label>';
+    html += '<button class="btn-remove" onclick="removeGroup(\'' + escapeAttr(group.id) + '\')" title="Remove group">x</button>';
     html += '</div>';
     html += '<div class="group-members">';
     group.memberIds.forEach(mid => {
@@ -277,7 +280,7 @@ function renderSidebar() {
       if (s) {
         html += '<div class="group-member">';
         html += escapeHtml(s.displayName);
-        html += '<button class="btn-remove" onclick="removeFromGroup(\'' + group.id + '\', \'' + mid + '\')" title="Remove from group">x</button>';
+        html += '<button class="btn-remove" onclick="removeFromGroup(\'' + escapeAttr(group.id) + '\', \'' + escapeAttr(mid) + '\')" title="Remove from group">x</button>';
         html += '</div>';
       }
     });
@@ -292,9 +295,9 @@ function renderSidebar() {
     if (groupedIds.has(s.id)) return;
     html += '<div class="station-entry">';
     html += '<input type="checkbox" class="station-check" data-id="' + s.id + '" onchange="updateGroupButton()" />';
-    html += '<input class="name-input" type="text" value="' + escapeAttr(s.displayName) + '" onchange="updateDisplayName(\'' + s.id + '\', this.value)" />';
-    html += '<label><input type="checkbox" ' + (s.primary ? 'checked' : '') + ' onchange="togglePrimary(\'' + s.id + '\', this.checked)" /> Primary</label>';
-    html += '<button class="btn-remove" onclick="removeStation(\'' + s.id + '\')" title="Remove">x</button>';
+    html += '<input class="name-input" type="text" value="' + escapeAttr(s.displayName) + '" onchange="updateDisplayName(\'' + escapeAttr(s.id) + '\', this.value)" />';
+    html += '<label><input type="checkbox" ' + (s.primary ? 'checked' : '') + ' onchange="togglePrimary(\'' + escapeAttr(s.id) + '\', this.checked)" /> Primary</label>';
+    html += '<button class="btn-remove" onclick="removeStation(\'' + escapeAttr(s.id) + '\')" title="Remove">x</button>';
     html += '</div>';
   });
 
@@ -381,8 +384,8 @@ document.getElementById('btn-group').addEventListener('click', () => {
 // Generate config
 document.getElementById('btn-generate').addEventListener('click', () => {
   const profile = buildProfile();
-  const docksConfig = JSON.stringify({ type: 'docks', profile: profile }, null, 2);
-  const bikesConfig = JSON.stringify({ type: 'bikes', profile: profile }, null, 2);
+  const docksConfig = JSON.stringify({ q: 'docks', profile: profile }, null, 2);
+  const bikesConfig = JSON.stringify({ q: 'bikes', profile: profile }, null, 2);
 
   document.getElementById('docks-config').textContent = docksConfig;
   document.getElementById('bikes-config').textContent = bikesConfig;
@@ -420,16 +423,18 @@ function buildProfile() {
 }
 
 // Copy buttons
-document.getElementById('btn-copy-docks').addEventListener('click', () => {
-  copyText(document.getElementById('docks-config').textContent);
+document.getElementById('btn-copy-docks').addEventListener('click', function() {
+  copyText(document.getElementById('docks-config').textContent, this);
 });
-document.getElementById('btn-copy-bikes').addEventListener('click', () => {
-  copyText(document.getElementById('bikes-config').textContent);
+document.getElementById('btn-copy-bikes').addEventListener('click', function() {
+  copyText(document.getElementById('bikes-config').textContent, this);
 });
 
-function copyText(text) {
+function copyText(text, btn) {
+  const original = btn.textContent;
   navigator.clipboard.writeText(text).then(() => {
-    // Brief feedback
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = original; }, 1500);
   }).catch(() => {
     // Fallback
     const ta = document.createElement('textarea');
@@ -438,6 +443,8 @@ function copyText(text) {
     ta.select();
     document.execCommand('copy');
     document.body.removeChild(ta);
+    btn.textContent = 'Copied!';
+    setTimeout(() => { btn.textContent = original; }, 1500);
   });
 }
 
