@@ -44,12 +44,12 @@ Resources:
         Variables:
           GBFS_TIMEOUT_S: "8"
       Events:
-        GetCitibikeCheck:
+        PostCitibikeCheck:
           Type: Api
           Properties:
             RestApiId: !Ref CitibikeApi
             Path: /citibike-check
-            Method: GET
+            Method: POST
 
   CitibikeCheckEnglishFunction:
     Type: AWS::Serverless::Function
