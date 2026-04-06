@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Citi Bike Station Picker</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; height: 100vh; }
+#header { background: #1976d2; color: white; padding: 12px 20px; font-size: 20px; font-weight: 600; flex-shrink: 0; }
+#search-bar { display: flex; gap: 8px; padding: 10px 20px; background: #f5f5f5; border-bottom: 1px solid #ddd; flex-shrink: 0; }
+#search-bar input { flex: 1; padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
+#search-bar button { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; white-space: nowrap; }
+#btn-search { background: #1976d2; color: white; }
+#btn-search:hover { background: #1565c0; }
+#btn-location { background: #43a047; color: white; }
+#btn-location:hover { background: #388e3c; }
+#content { display: flex; flex: 1; overflow: hidden; }
+#map { flex: 1; min-height: 0; }
+#sidebar { width: 380px; display: flex; flex-direction: column; border-left: 1px solid #ddd; background: #fafafa; overflow: hidden; }
+#sidebar-header { padding: 12px 16px; background: #e3f2fd; border-bottom: 1px solid #ddd; font-weight: 600; font-size: 15px; flex-shrink: 0; }
+#sidebar-actions { padding: 8px 16px; border-bottom: 1px solid #ddd; display: flex; gap: 8px; flex-shrink: 0; }
+#sidebar-actions button { padding: 6px 12px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; font-size: 13px; background: white; }
+#sidebar-actions button:disabled { opacity: 0.5; cursor: default; }
+#btn-group { background: #e3f2fd !important; border-color: #1976d2 !important; color: #1976d2; }
+#btn-generate { background: #1976d2 !important; color: white !important; border-color: #1976d2 !important; }
+#station-list { flex: 1; overflow-y: auto; padding: 8px 16px; }
+.empty-state { color: #888; text-align: center; padding: 40px 20px; font-size: 14px; }
+.station-entry { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid #e0e0e0; border-radius: 4px; margin-bottom: 6px; background: white; font-size: 13px; }
+.station-entry input[type="checkbox"] { flex-shrink: 0; }
+.station-entry .name-input { flex: 1; border: 1px solid transparent; padding: 2px 4px; border-radius: 3px; font-size: 13px; min-width: 0; }
+.station-entry .name-input:focus { border-color: #1976d2; outline: none; }
+.station-entry label { font-size: 11px; color: #666; flex-shrink: 0; display: flex; align-items: center; gap: 2px; }
+.station-entry .btn-remove { background: none; border: none; cursor: pointer; color: #999; font-size: 16px; padding: 0 4px; flex-shrink: 0; }
+.station-entry .btn-remove:hover { color: #d32f2f; }
+.group-container { border-left: 3px solid #1976d2; margin-bottom: 6px; border-radius: 4px; background: white; border: 1px solid #e0e0e0; border-left: 3px solid #1976d2; }
+.group-header { display: flex; align-items: center; gap: 6px; padding: 6px 8px; font-size: 13px; cursor: pointer; }
+.group-header .group-name-input { flex: 1; border: 1px solid transparent; padding: 2px 4px; border-radius: 3px; font-size: 13px; font-weight: 600; min-width: 0; }
+.group-header .group-name-input:focus { border-color: #1976d2; outline: none; }
+.group-header label { font-size: 11px; color: #666; flex-shrink: 0; display: flex; align-items: center; gap: 2px; }
+.group-header .btn-remove { background: none; border: none; cursor: pointer; color: #999; font-size: 16px; padding: 0 4px; flex-shrink: 0; }
+.group-header .btn-remove:hover { color: #d32f2f; }
+.group-header .toggle-arrow { flex-shrink: 0; font-size: 12px; color: #666; user-select: none; }
+.group-members { padding: 0 8px 6px 24px; display: none; }
+.group-members.expanded { display: block; }
+.group-member { padding: 3px 0; font-size: 12px; color: #555; display: flex; align-items: center; gap: 4px; }
+.group-member .btn-remove { background: none; border: none; cursor: pointer; color: #999; font-size: 14px; padding: 0 4px; }
+.group-member .btn-remove:hover { color: #d32f2f; }
+#output-section { padding: 16px; border-top: 1px solid #ddd; overflow-y: auto; flex-shrink: 0; max-height: 50%; display: none; }
+#output-section h3 { font-size: 14px; margin-bottom: 8px; }
+.config-block { margin-bottom: 12px; }
+.config-block label { font-size: 13px; font-weight: 600; display: block; margin-bottom: 4px; }
+.config-block pre { background: #263238; color: #eeffff; padding: 10px; border-radius: 4px; font-size: 12px; overflow-x: auto; white-space: pre-wrap; word-break: break-all; max-height: 150px; overflow-y: auto; }
+.config-block button { margin-top: 4px; padding: 4px 10px; font-size: 12px; border: 1px solid #ccc; border-radius: 3px; cursor: pointer; background: white; }
+.config-block button:hover { background: #e3f2fd; }
+#instructions { margin-top: 12px; font-size: 12px; line-height: 1.6; color: #444; }
+#instructions h4 { margin-bottom: 4px; font-size: 13px; }
+#instructions ol { padding-left: 18px; }
+#instructions code { background: #f0f0f0; padding: 1px 4px; border-radius: 2px; font-size: 11px; }
+
+@media (max-width: 768px) {
+  #content { flex-direction: column; }
+  #map { flex: none; height: 50vh; }
+  #sidebar { width: 100%; flex: 1; border-left: none; border-top: 1px solid #ddd; }
+  #search-bar { flex-wrap: wrap; }
+  #search-bar input { min-width: 150px; }
+}
+</style>
+</head>
+<body>
+
+<div id="header">Citi Bike Station Picker</div>
+
+<div id="search-bar">
+  <input type="text" id="address-input" placeholder="Search address..." />
+  <button id="btn-search">Search</button>
+  <button id="btn-location">My Location</button>
+</div>
+
+<div id="content">
+  <div id="map"></div>
+  <div id="sidebar">
+    <div id="sidebar-header">Selected Stations <span id="station-count">(0)</span></div>
+    <div id="sidebar-actions">
+      <button id="btn-group" disabled>Group Checked</button>
+      <button id="btn-generate" disabled>Generate Config</button>
+    </div>
+    <div id="station-list">
+      <div class="empty-state" id="empty-state">Click stations on the map to add them here.</div>
+    </div>
+    <div id="output-section">
+      <h3>Generated Configuration</h3>
+      <div class="config-block">
+        <label>Docks Config (paste into Shortcut for dock availability):</label>
+        <pre id="docks-config"></pre>
+        <button id="btn-copy-docks">Copy</button>
+      </div>
+      <div class="config-block">
+        <label>Bikes Config (paste into Shortcut for bike availability):</label>
+        <pre id="bikes-config"></pre>
+        <button id="btn-copy-bikes">Copy</button>
+      </div>
+      <div id="instructions">
+        <h4>Siri Shortcut Setup</h4>
+        <ol>
+          <li>Open the Shortcuts app, tap +</li>
+          <li>Name it (e.g., "Citi bike work docks")</li>
+          <li>Add action: <strong>Get Contents of URL</strong>
+            <ul>
+              <li>URL: <code id="instr-url"></code></li>
+              <li>Method: POST</li>
+              <li>Headers: Content-Type = application/json</li>
+              <li>Request Body: JSON -- paste the config from above</li>
+            </ul>
+          </li>
+          <li>Add action: <strong>Speak Text</strong> -- speak the result</li>
+          <li>Done! Trigger with "Hey Siri, Citi bike work docks"</li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+<script>
+const API_URL = 'https://YOUR_API_URL/prod';
+
+// State
+let stations = [];
+let selectedStations = []; // { id, name, displayName, primary, marker }
+let groups = []; // { id, name, memberIds: [], primary }
+let markerMap = {}; // stationId -> marker
+
+const defaultIcon = L.circleMarker([0, 0], { radius: 5, color: '#1976d2', fillColor: '#1976d2', fillOpacity: 0.7, weight: 1 });
+const selectedColor = '#43a047';
+const defaultColor = '#1976d2';
+
+// Init map
+const map = L.map('map').setView([40.7580, -73.9785], 14);
+L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+  attribution: '&copy; OpenStreetMap contributors',
+  maxZoom: 19
+}).addTo(map);
+
+const clusterGroup = L.markerClusterGroup({
+  maxClusterRadius: 40,
+  disableClusteringAtZoom: 16
+});
+map.addLayer(clusterGroup);
+
+// Load stations
+fetch('stations.json')
+  .then(r => r.json())
+  .then(data => {
+    stations = data;
+    data.forEach(station => {
+      const marker = L.circleMarker([station.lat, station.lon], {
+        radius: 5,
+        color: defaultColor,
+        fillColor: defaultColor,
+        fillOpacity: 0.7,
+        weight: 1
+      });
+      marker.stationId = station.id;
+      marker.stationName = station.name;
+      marker.on('click', () => openPopup(marker, station));
+      clusterGroup.addLayer(marker);
+      markerMap[station.id] = marker;
+    });
+  })
+  .catch(err => console.error('Failed to load stations:', err));
+
+function openPopup(marker, station) {
+  const isSelected = selectedStations.some(s => s.id === station.id);
+  const btnLabel = isSelected ? 'Remove' : 'Add to Profile';
+  const btnClass = isSelected ? 'color:#d32f2f' : 'color:#1976d2';
+  const popup = L.popup({ closeOnClick: false })
+    .setLatLng(marker.getLatLng())
+    .setContent(
+      '<div style="min-width:180px">' +
+      '<strong>' + escapeHtml(station.name) + '</strong><br>' +
+      '<span style="font-size:11px;color:#666">ID: ' + escapeHtml(station.id) + '</span><br>' +
+      '<button onclick="toggleStation(\'' + station.id + '\')" style="margin-top:6px;padding:4px 10px;border:1px solid #ccc;border-radius:3px;cursor:pointer;background:white;font-size:12px;' + btnClass + '">' + btnLabel + '</button>' +
+      '</div>'
+    )
+    .openOn(map);
+}
+
+function escapeHtml(str) {
+  const div = document.createElement('div');
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function toggleStation(stationId) {
+  const existing = selectedStations.find(s => s.id === stationId);
+  if (existing) {
+    removeStation(stationId);
+  } else {
+    addStation(stationId);
+  }
+  map.closePopup();
+}
+
+function addStation(stationId) {
+  const station = stations.find(s => s.id === stationId);
+  if (!station || selectedStations.some(s => s.id === stationId)) return;
+
+  const totalCount = selectedStations.length;
+  selectedStations.push({
+    id: station.id,
+    name: station.name,
+    displayName: station.name,
+    primary: totalCount < 2
+  });
+
+  updateMarkerColor(stationId, true);
+  renderSidebar();
+}
+
+function removeStation(stationId) {
+  // Remove from any group
+  groups.forEach(g => {
+    g.memberIds = g.memberIds.filter(id => id !== stationId);
+  });
+  // Remove empty groups
+  groups = groups.filter(g => g.memberIds.length > 0);
+
+  selectedStations = selectedStations.filter(s => s.id !== stationId);
+  updateMarkerColor(stationId, false);
+  renderSidebar();
+}
+
+function updateMarkerColor(stationId, selected) {
+  const marker = markerMap[stationId];
+  if (marker) {
+    const color = selected ? selectedColor : defaultColor;
+    marker.setStyle({ color: color, fillColor: color });
+  }
+}
+
+function renderSidebar() {
+  const list = document.getElementById('station-list');
+  const emptyState = document.getElementById('empty-state');
+  const countEl = document.getElementById('station-count');
+  const btnGroup = document.getElementById('btn-group');
+  const btnGenerate = document.getElementById('btn-generate');
+
+  countEl.textContent = '(' + selectedStations.length + ')';
+  btnGenerate.disabled = selectedStations.length === 0;
+
+  if (selectedStations.length === 0) {
+    list.innerHTML = '<div class="empty-state">Click stations on the map to add them here.</div>';
+    btnGroup.disabled = true;
+    document.getElementById('output-section').style.display = 'none';
+    return;
+  }
+
+  let html = '';
+
+  // Render groups
+  groups.forEach((group, gi) => {
+    html += '<div class="group-container" data-group-id="' + group.id + '">';
+    html += '<div class="group-header">';
+    html += '<span class="toggle-arrow" onclick="toggleGroupExpand(this)">[+]</span>';
+    html += '<input class="group-name-input" type="text" value="' + escapeAttr(group.name) + '" onchange="updateGroupName(\'' + group.id + '\', this.value)" />';
+    html += '<label><input type="checkbox" ' + (group.primary ? 'checked' : '') + ' onchange="toggleGroupPrimary(\'' + group.id + '\', this.checked)" /> Primary</label>';
+    html += '<button class="btn-remove" onclick="removeGroup(\'' + group.id + '\')" title="Remove group">x</button>';
+    html += '</div>';
+    html += '<div class="group-members">';
+    group.memberIds.forEach(mid => {
+      const s = selectedStations.find(st => st.id === mid);
+      if (s) {
+        html += '<div class="group-member">';
+        html += escapeHtml(s.displayName);
+        html += '<button class="btn-remove" onclick="removeFromGroup(\'' + group.id + '\', \'' + mid + '\')" title="Remove from group">x</button>';
+        html += '</div>';
+      }
+    });
+    html += '</div></div>';
+  });
+
+  // Render ungrouped stations
+  const groupedIds = new Set();
+  groups.forEach(g => g.memberIds.forEach(id => groupedIds.add(id)));
+
+  selectedStations.forEach((s, i) => {
+    if (groupedIds.has(s.id)) return;
+    html += '<div class="station-entry">';
+    html += '<input type="checkbox" class="station-check" data-id="' + s.id + '" onchange="updateGroupButton()" />';
+    html += '<input class="name-input" type="text" value="' + escapeAttr(s.displayName) + '" onchange="updateDisplayName(\'' + s.id + '\', this.value)" />';
+    html += '<label><input type="checkbox" ' + (s.primary ? 'checked' : '') + ' onchange="togglePrimary(\'' + s.id + '\', this.checked)" /> Primary</label>';
+    html += '<button class="btn-remove" onclick="removeStation(\'' + s.id + '\')" title="Remove">x</button>';
+    html += '</div>';
+  });
+
+  list.innerHTML = html;
+  updateGroupButton();
+}
+
+function escapeAttr(str) {
+  return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function updateDisplayName(stationId, newName) {
+  const s = selectedStations.find(st => st.id === stationId);
+  if (s) s.displayName = newName;
+}
+
+function togglePrimary(stationId, checked) {
+  const s = selectedStations.find(st => st.id === stationId);
+  if (s) s.primary = checked;
+}
+
+function toggleGroupPrimary(groupId, checked) {
+  const g = groups.find(gr => gr.id === groupId);
+  if (g) g.primary = checked;
+}
+
+function updateGroupName(groupId, newName) {
+  const g = groups.find(gr => gr.id === groupId);
+  if (g) g.name = newName;
+}
+
+function toggleGroupExpand(arrowEl) {
+  const members = arrowEl.closest('.group-container').querySelector('.group-members');
+  if (members.classList.contains('expanded')) {
+    members.classList.remove('expanded');
+    arrowEl.textContent = '[+]';
+  } else {
+    members.classList.add('expanded');
+    arrowEl.textContent = '[-]';
+  }
+}
+
+function removeGroup(groupId) {
+  groups = groups.filter(g => g.id !== groupId);
+  renderSidebar();
+}
+
+function removeFromGroup(groupId, stationId) {
+  const g = groups.find(gr => gr.id === groupId);
+  if (g) {
+    g.memberIds = g.memberIds.filter(id => id !== stationId);
+    if (g.memberIds.length === 0) {
+      groups = groups.filter(gr => gr.id !== groupId);
+    }
+  }
+  renderSidebar();
+}
+
+function updateGroupButton() {
+  const checks = document.querySelectorAll('.station-check:checked');
+  document.getElementById('btn-group').disabled = checks.length < 2;
+}
+
+// Group checked stations
+document.getElementById('btn-group').addEventListener('click', () => {
+  const checks = document.querySelectorAll('.station-check:checked');
+  if (checks.length < 2) return;
+  const name = prompt('Enter a name for this group:');
+  if (!name) return;
+
+  const memberIds = [];
+  checks.forEach(cb => memberIds.push(cb.dataset.id));
+
+  groups.push({
+    id: 'group-' + Date.now(),
+    name: name,
+    memberIds: memberIds,
+    primary: false
+  });
+
+  renderSidebar();
+});
+
+// Generate config
+document.getElementById('btn-generate').addEventListener('click', () => {
+  const profile = buildProfile();
+  const docksConfig = JSON.stringify({ type: 'docks', profile: profile }, null, 2);
+  const bikesConfig = JSON.stringify({ type: 'bikes', profile: profile }, null, 2);
+
+  document.getElementById('docks-config').textContent = docksConfig;
+  document.getElementById('bikes-config').textContent = bikesConfig;
+  document.getElementById('instr-url').textContent = API_URL + '/citibike-check-english';
+  document.getElementById('output-section').style.display = 'block';
+});
+
+function buildProfile() {
+  const profile = [];
+  const groupedIds = new Set();
+  groups.forEach(g => g.memberIds.forEach(id => groupedIds.add(id)));
+
+  // Add groups
+  groups.forEach(g => {
+    const entry = {
+      name: g.name,
+      stations: g.memberIds.map(id => {
+        const s = selectedStations.find(st => st.id === id);
+        return { id: id, name: s ? s.displayName : id };
+      })
+    };
+    if (g.primary) entry.primary = true;
+    profile.push(entry);
+  });
+
+  // Add ungrouped stations
+  selectedStations.forEach(s => {
+    if (groupedIds.has(s.id)) return;
+    const entry = { name: s.displayName, id: s.id };
+    if (s.primary) entry.primary = true;
+    profile.push(entry);
+  });
+
+  return profile;
+}
+
+// Copy buttons
+document.getElementById('btn-copy-docks').addEventListener('click', () => {
+  copyText(document.getElementById('docks-config').textContent);
+});
+document.getElementById('btn-copy-bikes').addEventListener('click', () => {
+  copyText(document.getElementById('bikes-config').textContent);
+});
+
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => {
+    // Brief feedback
+  }).catch(() => {
+    // Fallback
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  });
+}
+
+// Address search via Nominatim
+document.getElementById('btn-search').addEventListener('click', searchAddress);
+document.getElementById('address-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') searchAddress();
+});
+
+function searchAddress() {
+  const query = document.getElementById('address-input').value.trim();
+  if (!query) return;
+
+  fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(query), {
+    headers: { 'User-Agent': 'CitiBikeStationPicker/1.0' }
+  })
+    .then(r => r.json())
+    .then(results => {
+      if (results.length > 0) {
+        const lat = parseFloat(results[0].lat);
+        const lon = parseFloat(results[0].lon);
+        map.setView([lat, lon], 16);
+      } else {
+        alert('No results found for that address.');
+      }
+    })
+    .catch(err => {
+      console.error('Geocoding error:', err);
+      alert('Search failed. Please try again.');
+    });
+}
+
+// Geolocation
+document.getElementById('btn-location').addEventListener('click', () => {
+  if (!navigator.geolocation) {
+    alert('Geolocation is not supported by your browser.');
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    pos => map.setView([pos.coords.latitude, pos.coords.longitude], 16),
+    err => alert('Could not get your location: ' + err.message)
+  );
+});
+</script>
+</body>
+</html>
