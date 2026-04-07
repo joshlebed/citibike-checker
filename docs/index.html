@@ -22,6 +22,10 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
 #map { flex: 1; min-height: 0; }
 #sidebar { width: 380px; display: flex; flex-direction: column; border-left: 1px solid #ddd; background: #fafafa; overflow: hidden; }
 #sidebar-header { padding: 12px 16px; background: #e3f2fd; border-bottom: 1px solid #ddd; font-weight: 600; font-size: 15px; flex-shrink: 0; }
+#profile-bar { padding: 8px 16px; border-bottom: 1px solid #ddd; display: flex; gap: 6px; align-items: center; flex-shrink: 0; background: #fff; }
+#profile-bar select { flex: 1; padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
+#profile-bar button { padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; font-size: 12px; background: white; white-space: nowrap; }
+#profile-bar button:hover { background: #e3f2fd; }
 #sidebar-actions { padding: 8px 16px; border-bottom: 1px solid #ddd; display: flex; gap: 8px; flex-shrink: 0; }
 #sidebar-actions button { padding: 6px 12px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; font-size: 13px; background: white; }
 #sidebar-actions button:disabled { opacity: 0.5; cursor: default; }
@@ -84,6 +88,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
   <div id="map"></div>
   <div id="sidebar">
     <div id="sidebar-header">Selected Stations <span id="station-count">(0)</span></div>
+    <div id="profile-bar">
+      <select id="profile-select"></select>
+      <button id="btn-new-profile">New</button>
+      <button id="btn-rename-profile">Rename</button>
+      <button id="btn-delete-profile">Delete</button>
+    </div>
     <div id="sidebar-actions">
       <button id="btn-group" disabled>Group Checked</button>
       <button id="btn-generate" disabled>Generate Config</button>
@@ -132,12 +142,142 @@ const API_URL = 'https://0j7cn0bse9.execute-api.us-east-1.amazonaws.com/prod';
 
 // State
 let stations = [];
-let selectedStations = []; // { id, name, displayName, primary, marker }
+let selectedStations = []; // { id, name, displayName, primary }
 let groups = []; // { id, name, memberIds: [], primary }
 let markerMap = {}; // stationId -> marker
+let currentProfileName = 'default';
 
 const selectedColor = '#43a047';
 const defaultColor = '#e65100';
+
+// === Profile / localStorage management ===
+const STORAGE_KEY = 'citibike-profiles';
+
+function loadAllProfiles() {
+  try {
+    return JSON.parse(localStorage.getItem(STORAGE_KEY)) || {};
+  } catch (e) { return {}; }
+}
+
+function saveAllProfiles(profiles) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(profiles));
+}
+
+function saveCurrentProfile() {
+  const profiles = loadAllProfiles();
+  profiles[currentProfileName] = { selectedStations, groups };
+  saveAllProfiles(profiles);
+}
+
+function loadProfile(name) {
+  // Clear current markers
+  selectedStations.forEach(s => updateMarkerColor(s.id, false));
+
+  const profiles = loadAllProfiles();
+  const data = profiles[name] || { selectedStations: [], groups: [] };
+  selectedStations = data.selectedStations || [];
+  groups = data.groups || [];
+  currentProfileName = name;
+
+  // Update marker colors for loaded profile
+  selectedStations.forEach(s => updateMarkerColor(s.id, true));
+  renderSidebar();
+  document.getElementById('output-section').style.display = 'none';
+}
+
+function renderProfileSelect() {
+  const profiles = loadAllProfiles();
+  const select = document.getElementById('profile-select');
+  const names = Object.keys(profiles);
+  if (names.length === 0) {
+    names.push('default');
+    saveAllProfiles({ 'default': { selectedStations: [], groups: [] } });
+  }
+  select.innerHTML = names.map(n =>
+    '<option value="' + escapeAttr(n) + '"' + (n === currentProfileName ? ' selected' : '') + '>' + escapeHtml(n) + '</option>'
+  ).join('');
+  document.getElementById('btn-delete-profile').disabled = names.length <= 1;
+}
+
+function initProfiles() {
+  const profiles = loadAllProfiles();
+  const names = Object.keys(profiles);
+  if (names.length === 0) {
+    currentProfileName = 'default';
+    saveCurrentProfile();
+  } else {
+    currentProfileName = names[0];
+  }
+  renderProfileSelect();
+}
+
+// Profile UI events
+document.getElementById('profile-select').addEventListener('change', function() {
+  saveCurrentProfile();
+  loadProfile(this.value);
+  renderProfileSelect();
+});
+
+document.getElementById('btn-new-profile').addEventListener('click', () => {
+  const profiles = loadAllProfiles();
+  let name = 'work';
+  let i = 1;
+  while (profiles[name]) { name = 'profile ' + (++i); }
+  // Save current first
+  saveCurrentProfile();
+  // Create new empty profile
+  currentProfileName = name;
+  selectedStations.forEach(s => updateMarkerColor(s.id, false));
+  selectedStations = [];
+  groups = [];
+  saveCurrentProfile();
+  renderProfileSelect();
+  renderSidebar();
+  document.getElementById('output-section').style.display = 'none';
+  // Let user rename immediately
+  const select = document.getElementById('profile-select');
+  select.value = name;
+  document.getElementById('btn-rename-profile').click();
+});
+
+document.getElementById('btn-rename-profile').addEventListener('click', () => {
+  const select = document.getElementById('profile-select');
+  const oldName = currentProfileName;
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = oldName;
+  input.style.cssText = 'flex:1;padding:5px 8px;border:1px solid #1976d2;border-radius:4px;font-size:13px;outline:none;';
+  select.replaceWith(input);
+  input.select();
+  input.focus();
+
+  function finishRename() {
+    const newName = input.value.trim() || oldName;
+    input.replaceWith(select);
+    if (newName !== oldName) {
+      const profiles = loadAllProfiles();
+      profiles[newName] = profiles[oldName];
+      delete profiles[oldName];
+      saveAllProfiles(profiles);
+      currentProfileName = newName;
+    }
+    renderProfileSelect();
+  }
+  input.addEventListener('blur', finishRename);
+  input.addEventListener('keydown', e => { if (e.key === 'Enter') input.blur(); });
+});
+
+document.getElementById('btn-delete-profile').addEventListener('click', () => {
+  const profiles = loadAllProfiles();
+  const names = Object.keys(profiles);
+  if (names.length <= 1) return;
+  delete profiles[currentProfileName];
+  saveAllProfiles(profiles);
+  selectedStations.forEach(s => updateMarkerColor(s.id, false));
+  currentProfileName = Object.keys(profiles)[0];
+  loadProfile(currentProfileName);
+  renderProfileSelect();
+});
 
 // Init map
 const map = L.map('map').setView([40.7580, -73.9785], 14);
@@ -171,6 +311,9 @@ fetch('stations.json')
       clusterGroup.addLayer(marker);
       markerMap[station.id] = marker;
     });
+    // Restore saved profile after markers are created
+    initProfiles();
+    loadProfile(currentProfileName);
   })
   .catch(err => {
     console.error('Failed to load stations:', err);
@@ -224,6 +367,7 @@ function addStation(stationId) {
 
   updateMarkerColor(stationId, true);
   renderSidebar();
+  saveCurrentProfile();
 }
 
 function removeStation(stationId) {
@@ -237,6 +381,7 @@ function removeStation(stationId) {
   selectedStations = selectedStations.filter(s => s.id !== stationId);
   updateMarkerColor(stationId, false);
   renderSidebar();
+  saveCurrentProfile();
 }
 
 function updateMarkerColor(stationId, selected) {
@@ -312,22 +457,22 @@ function escapeAttr(str) {
 
 function updateDisplayName(stationId, newName) {
   const s = selectedStations.find(st => st.id === stationId);
-  if (s) s.displayName = newName;
+  if (s) { s.displayName = newName; saveCurrentProfile(); }
 }
 
 function togglePrimary(stationId, checked) {
   const s = selectedStations.find(st => st.id === stationId);
-  if (s) s.primary = checked;
+  if (s) { s.primary = checked; saveCurrentProfile(); }
 }
 
 function toggleGroupPrimary(groupId, checked) {
   const g = groups.find(gr => gr.id === groupId);
-  if (g) g.primary = checked;
+  if (g) { g.primary = checked; saveCurrentProfile(); }
 }
 
 function updateGroupName(groupId, newName) {
   const g = groups.find(gr => gr.id === groupId);
-  if (g) g.name = newName;
+  if (g) { g.name = newName; saveCurrentProfile(); }
 }
 
 function toggleGroupExpand(arrowEl) {
@@ -344,6 +489,7 @@ function toggleGroupExpand(arrowEl) {
 function removeGroup(groupId) {
   groups = groups.filter(g => g.id !== groupId);
   renderSidebar();
+  saveCurrentProfile();
 }
 
 function removeFromGroup(groupId, stationId) {
@@ -355,6 +501,7 @@ function removeFromGroup(groupId, stationId) {
     }
   }
   renderSidebar();
+  saveCurrentProfile();
 }
 
 function updateGroupButton() {
@@ -383,6 +530,7 @@ document.getElementById('btn-group').addEventListener('click', () => {
   });
 
   renderSidebar();
+  saveCurrentProfile();
 
   // Focus the group name input so user can rename it
   const nameInput = document.querySelector('[data-group-id="' + groupId + '"]');
