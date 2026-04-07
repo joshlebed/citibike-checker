@@ -13,6 +13,11 @@ logger.setLevel(logging.INFO)
 # Threshold: if primary availability is at or below this, also show backups
 LOW_AVAILABILITY_THRESHOLD = 3
 
+# Defensive limits on incoming profile size to bound CPU/memory and protect
+# upstream GBFS feed from amplification by maliciously oversized requests.
+MAX_PROFILE_ENTRIES = 100
+MAX_STATION_IDS = 200
+
 
 @dataclass
 class StationData:
@@ -101,6 +106,24 @@ def _get_all_station_ids(profile: list) -> list[str]:
             for station in entry["stations"]:
                 ids.append(station["id"])
     return ids
+
+
+def _validate_profile_size(profile: list) -> str | None:
+    """Returns an error message if profile exceeds size limits, else None."""
+    if len(profile) > MAX_PROFILE_ENTRIES:
+        return f"profile too large (max {MAX_PROFILE_ENTRIES} entries)"
+    total = 0
+    for entry in profile:
+        if "id" in entry:
+            total += 1
+        elif "stations" in entry:
+            stations = entry.get("stations") or []
+            if not isinstance(stations, list):
+                return "stations must be an array"
+            total += len(stations)
+        if total > MAX_STATION_IDS:
+            return f"too many station IDs (max {MAX_STATION_IDS} total)"
+    return None
 
 
 def _bad_request(message: str, content_type: str):
@@ -414,6 +437,10 @@ def citibike_check(event, context):
     if not profile or not isinstance(profile, list):
         return _bad_request("profile is required and must be an array", "application/json")
 
+    size_err = _validate_profile_size(profile)
+    if size_err:
+        return _bad_request(size_err, "application/json")
+
     count_type = _resolve_type(body)
 
     try:
@@ -432,7 +459,7 @@ def citibike_check(event, context):
         return {
             "statusCode": 500,
             "headers": {"content-type": "application/json"},
-            "body": json.dumps({"error": str(e)}),
+            "body": json.dumps({"error": "internal error"}),
         }
 
     return {
@@ -455,6 +482,10 @@ def citibike_check_english(event, context):
     if not profile or not isinstance(profile, list):
         return _bad_request("profile is required and must be an array", "text/plain")
 
+    size_err = _validate_profile_size(profile)
+    if size_err:
+        return _bad_request(size_err, "text/plain")
+
     count_type = _resolve_type(body)
 
     try:
@@ -473,7 +504,7 @@ def citibike_check_english(event, context):
         return {
             "statusCode": 500,
             "headers": {"content-type": "text/plain"},
-            "body": f"Error: {e}",
+            "body": "Error: internal error",
         }
 
     return {

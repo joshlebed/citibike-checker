@@ -2,6 +2,15 @@ AWSTemplateFormatVersion: "2010-09-09"
 Transform: AWS::Serverless-2016-10-31
 Description: Citi Bike station availability checker
 
+Parameters:
+  BudgetEmail:
+    Type: String
+    Description: Email address that receives AWS Budget threshold notifications
+  BudgetMonthlyLimitUsd:
+    Type: Number
+    Default: 5
+    Description: Monthly USD budget cap; alerts fire at 50%, 80%, and forecasted 100%
+
 Globals:
   Function:
     Runtime: python3.11
@@ -17,27 +26,44 @@ Resources:
       StageName: prod
       Cors:
         AllowMethods: "'GET,POST,OPTIONS'"
-        AllowHeaders: "'Content-Type'"
+        AllowHeaders: "'Content-Type,x-api-key'"
         AllowOrigin: "'*'"
+      Auth:
+        ApiKeyRequired: true
+        # Usage plan is declared manually below (CitibikeUsagePlan) so we
+        # control its name and so adding more keys uses the same pattern
+        # as the primary key.
+        UsagePlan:
+          CreateUsagePlan: NONE
+      MethodSettings:
+        - ResourcePath: "/*"
+          HttpMethod: "*"
+          ThrottlingBurstLimit: 10
+          ThrottlingRateLimit: 5
 
-  # Log groups with retention policy
+  # Log groups with short retention: logs are only kept long enough to debug
+  # recent issues. At scale (e.g. abuse), this caps CloudWatch storage cost.
   CitibikeCheckLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub /aws/lambda/${CitibikeCheckFunction}
-      RetentionInDays: 14
+      RetentionInDays: 1
 
   CitibikeCheckEnglishLogGroup:
     Type: AWS::Logs::LogGroup
     Properties:
       LogGroupName: !Sub /aws/lambda/${CitibikeCheckEnglishFunction}
-      RetentionInDays: 14
+      RetentionInDays: 1
 
   CitibikeCheckFunction:
     Type: AWS::Serverless::Function
     Properties:
       Handler: lambda_app.handler.citibike_check
       CodeUri: src/
+      # ReservedConcurrentExecutions intentionally omitted: this AWS account
+      # has a total concurrency limit of 10 and the unreserved pool must stay
+      # at >= 10, so no per-function reservation is possible. The account-wide
+      # cap of 10 already serves as the hard ceiling.
       Policies:
         - AWSLambdaBasicExecutionRole
       Environment:
@@ -56,6 +82,8 @@ Resources:
     Properties:
       Handler: lambda_app.handler.citibike_check_english
       CodeUri: src/
+      # See note on CitibikeCheckFunction — reserved concurrency unavailable
+      # on this account due to the 10-execution total limit.
       Policies:
         - AWSLambdaBasicExecutionRole
       Environment:
@@ -104,6 +132,79 @@ Resources:
           Value: !Ref CitibikeCheckEnglishFunction
       TreatMissingData: notBreaching
 
+  # Single shared usage plan for all API keys: per-key throttle + daily quota.
+  CitibikeUsagePlan:
+    Type: AWS::ApiGateway::UsagePlan
+    Properties:
+      UsagePlanName: !Sub "${AWS::StackName}-usage-plan"
+      Description: Per-key throttle and daily quota for citibike-checker
+      ApiStages:
+        - ApiId: !Ref CitibikeApi
+          Stage: !Ref CitibikeApi.Stage
+      Quota:
+        Limit: 200
+        Period: DAY
+      Throttle:
+        BurstLimit: 5
+        RateLimit: 2
+
+  # API key for the primary user. Add more by duplicating both this
+  # resource and PrimaryApiKeyAssociation with new logical names
+  # (e.g. AliceApiKey + AliceApiKeyAssociation).
+  PrimaryApiKey:
+    Type: AWS::ApiGateway::ApiKey
+    DependsOn: CitibikeApiprodStage
+    Properties:
+      Name: !Sub "${AWS::StackName}-primary"
+      Description: Primary API key for citibike-checker
+      Enabled: true
+
+  PrimaryApiKeyAssociation:
+    Type: AWS::ApiGateway::UsagePlanKey
+    Properties:
+      KeyId: !Ref PrimaryApiKey
+      KeyType: API_KEY
+      UsagePlanId: !Ref CitibikeUsagePlan
+
+  # Account-wide monthly budget. Tracks all spend in this AWS account
+  # (no CostFilters), so use a dedicated AWS account or add filters
+  # if you share the account with other projects.
+  MonthlyBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName: !Sub "${AWS::StackName}-monthly"
+        BudgetLimit:
+          Amount: !Ref BudgetMonthlyLimitUsd
+          Unit: USD
+        TimeUnit: MONTHLY
+        BudgetType: COST
+      NotificationsWithSubscribers:
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 50
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref BudgetEmail
+        - Notification:
+            NotificationType: ACTUAL
+            ComparisonOperator: GREATER_THAN
+            Threshold: 80
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref BudgetEmail
+        - Notification:
+            NotificationType: FORECASTED
+            ComparisonOperator: GREATER_THAN
+            Threshold: 100
+            ThresholdType: PERCENTAGE
+          Subscribers:
+            - SubscriptionType: EMAIL
+              Address: !Ref BudgetEmail
+
 Outputs:
   ApiBaseUrl:
     Description: Base URL for the API Gateway stage
@@ -114,3 +215,6 @@ Outputs:
   CitibikeCheckEnglishEndpoint:
     Description: English endpoint
     Value: !Sub "https://${CitibikeApi}.execute-api.${AWS::Region}.amazonaws.com/prod/citibike-check-english"
+  PrimaryApiKeyId:
+    Description: ID of the primary API key. Fetch the value with `aws apigateway get-api-key --api-key <id> --include-value --query value --output text`
+    Value: !Ref PrimaryApiKey

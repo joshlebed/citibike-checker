@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any, Dict, Iterable, List, Optional, Tuple
@@ -9,6 +10,14 @@ import requests
 
 DEFAULT_STATUS_URL = "https://gbfs.citibikenyc.com/gbfs/en/station_status.json"
 DEFAULT_INFO_URL = "https://gbfs.citibikenyc.com/gbfs/en/station_information.json"
+
+# Module-level TTL cache for GBFS feed fetches. Warm Lambda containers reuse
+# the cached feeds across invocations, which collapses multiple simultaneous
+# requests into one upstream HTTP call per URL every FEED_CACHE_TTL_S seconds.
+# The GBFS feeds update roughly every 10 seconds, so a 5s TTL keeps data fresh
+# while cutting upstream load ~10-25x at steady state.
+FEED_CACHE_TTL_S = 5.0
+_feed_cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
 
 
 @dataclass(frozen=True)
@@ -46,6 +55,20 @@ def _fetch_json(url: str, timeout_s: float = 10.0) -> Dict[str, Any]:
         raise GbfsError(f"Failed to fetch/parse GBFS feed: {url} ({e})") from e
 
 
+def _fetch_json_cached(url: str, timeout_s: float = 10.0) -> Dict[str, Any]:
+    """
+    TTL-cached wrapper around _fetch_json. Cache lives in module-level state
+    and survives across invocations within a warm Lambda container.
+    """
+    now = time.monotonic()
+    cached = _feed_cache.get(url)
+    if cached is not None and (now - cached[0]) < FEED_CACHE_TTL_S:
+        return cached[1]
+    data = _fetch_json(url, timeout_s=timeout_s)
+    _feed_cache[url] = (now, data)
+    return data
+
+
 def _parse_station_status(payload: Dict[str, Any]) -> Tuple[Dict[str, Dict[str, Any]], Optional[int]]:
     """
     Returns (station_id -> station_status_obj, ttl_seconds)
@@ -81,12 +104,12 @@ def compute_parking_summary(
     if not station_ids_list:
         raise ValueError("No station_ids provided")
 
-    status_payload = _fetch_json(station_status_url, timeout_s=timeout_s)
+    status_payload = _fetch_json_cached(station_status_url, timeout_s=timeout_s)
     status_by_id, ttl = _parse_station_status(status_payload)
 
     name_by_id: Dict[str, str] = {}
     if station_information_url:
-        info_payload = _fetch_json(station_information_url, timeout_s=timeout_s)
+        info_payload = _fetch_json_cached(station_information_url, timeout_s=timeout_s)
         name_by_id = _parse_station_information(info_payload)
 
     results: List[StationResult] = []
