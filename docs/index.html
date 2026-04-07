@@ -4,178 +4,1295 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Citi Bike Station Picker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;800;900&family=Archivo:wght@400;500;600;700;900&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
 <style>
+:root {
+  --bg: #f4f0e6;
+  --bg-card: #fffcf3;
+  --bg-overlay: rgba(10, 14, 26, 0.55);
+  --ink: #0a0e1a;
+  --ink-soft: #3a3e4a;
+  --ink-faint: #8a8d96;
+  --accent: #e85d2f;
+  --accent-dark: #c54a20;
+  --accent-light: #ffe4d6;
+  --blue: #1a3a8c;
+  --success: #2d8f3f;
+  --rule: rgba(10, 14, 26, 0.15);
+  --shadow-sm: 2px 2px 0 var(--ink);
+  --shadow-md: 4px 4px 0 var(--ink);
+  --shadow-lg: 6px 6px 0 var(--ink);
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; display: flex; flex-direction: column; height: 100vh; }
-#header { background: #1976d2; color: white; padding: 12px 20px; font-size: 20px; font-weight: 600; flex-shrink: 0; }
-#search-bar { display: flex; gap: 8px; padding: 10px 20px; background: #f5f5f5; border-bottom: 1px solid #ddd; flex-shrink: 0; }
-#search-bar input { flex: 1; padding: 8px 12px; border: 1px solid #ccc; border-radius: 4px; font-size: 14px; }
-#search-bar button { padding: 8px 16px; border: none; border-radius: 4px; cursor: pointer; font-size: 14px; white-space: nowrap; }
-#btn-search { background: #1976d2; color: white; }
-#btn-search:hover { background: #1565c0; }
-#btn-location { background: #43a047; color: white; }
-#btn-location:hover { background: #388e3c; }
-#content { display: flex; flex: 1; overflow: hidden; }
-#map { flex: 1; min-height: 0; }
-#sidebar { width: 380px; display: flex; flex-direction: column; border-left: 1px solid #ddd; background: #fafafa; overflow: hidden; }
-#sidebar-header { padding: 12px 16px; background: #e3f2fd; border-bottom: 1px solid #ddd; font-weight: 600; font-size: 15px; flex-shrink: 0; }
-#profile-bar { padding: 8px 16px; border-bottom: 1px solid #ddd; display: flex; gap: 6px; align-items: center; flex-shrink: 0; background: #fff; }
-#profile-bar select { flex: 1; padding: 5px 8px; border: 1px solid #ccc; border-radius: 4px; font-size: 13px; }
-#profile-bar button { padding: 4px 8px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; font-size: 12px; background: white; white-space: nowrap; }
-#profile-bar button:hover { background: #e3f2fd; }
-#sidebar-actions { padding: 8px 16px; border-bottom: 1px solid #ddd; display: flex; gap: 8px; flex-shrink: 0; }
-#sidebar-actions button { padding: 6px 12px; border: 1px solid #ccc; border-radius: 4px; cursor: pointer; font-size: 13px; background: white; }
-#sidebar-actions button:disabled { opacity: 0.5; cursor: default; }
-#btn-group { background: #e3f2fd !important; border-color: #1976d2 !important; color: #1976d2; }
-#btn-generate { background: #1976d2 !important; color: white !important; border-color: #1976d2 !important; }
-#station-list { flex: 1; overflow-y: auto; padding: 8px 16px; }
-.empty-state { color: #888; text-align: center; padding: 40px 20px; font-size: 14px; }
-.station-entry { display: flex; align-items: center; gap: 6px; padding: 6px 8px; border: 1px solid #e0e0e0; border-radius: 4px; margin-bottom: 6px; background: white; font-size: 13px; }
-.station-entry input[type="checkbox"] { flex-shrink: 0; }
-.station-entry .name-input { flex: 1; border: 1px solid transparent; padding: 2px 4px; border-radius: 3px; font-size: 13px; min-width: 0; }
-.station-entry .name-input:focus { border-color: #1976d2; outline: none; }
-.station-entry label { font-size: 11px; color: #666; flex-shrink: 0; display: flex; align-items: center; gap: 2px; }
-.station-entry .btn-remove { background: none; border: none; cursor: pointer; color: #999; font-size: 16px; padding: 0 4px; flex-shrink: 0; }
-.station-entry .btn-remove:hover { color: #d32f2f; }
-.group-container { border-left: 3px solid #1976d2; margin-bottom: 6px; border-radius: 4px; background: white; border: 1px solid #e0e0e0; border-left: 3px solid #1976d2; }
-.group-header { display: flex; align-items: center; gap: 6px; padding: 6px 8px; font-size: 13px; cursor: pointer; }
-.group-header .group-name-input { flex: 1; border: 1px solid transparent; padding: 2px 4px; border-radius: 3px; font-size: 13px; font-weight: 600; min-width: 0; }
-.group-header .group-name-input:focus { border-color: #1976d2; outline: none; }
-.group-header label { font-size: 11px; color: #666; flex-shrink: 0; display: flex; align-items: center; gap: 2px; }
-.group-header .btn-remove { background: none; border: none; cursor: pointer; color: #999; font-size: 16px; padding: 0 4px; flex-shrink: 0; }
-.group-header .btn-remove:hover { color: #d32f2f; }
-.group-header .toggle-arrow { flex-shrink: 0; font-size: 12px; color: #666; user-select: none; }
-.group-members { padding: 0 8px 6px 24px; display: none; }
+
+html, body {
+  height: 100%;
+  font-family: 'Archivo', system-ui, -apple-system, sans-serif;
+  color: var(--ink);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+body {
+  display: flex;
+  flex-direction: column;
+  background-image:
+    radial-gradient(rgba(10, 14, 26, 0.04) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+button { font-family: inherit; cursor: pointer; }
+input, select { font-family: inherit; }
+
+/* === HEADER === */
+#header {
+  flex-shrink: 0;
+  background: var(--ink);
+  color: var(--bg);
+  padding: 18px 28px 16px;
+  border-bottom: 4px solid var(--accent);
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  position: relative;
+}
+
+#header::after {
+  content: '';
+  position: absolute;
+  left: 0; right: 0;
+  bottom: -8px;
+  height: 4px;
+  background: repeating-linear-gradient(
+    90deg,
+    var(--accent) 0 16px,
+    transparent 16px 24px
+  );
+  opacity: 0.4;
+}
+
+.header-brand {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  min-width: 0;
+}
+
+.bike-icon {
+  flex-shrink: 0;
+  color: var(--accent);
+}
+
+.header-title {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.header-title h1 {
+  font-family: 'Big Shoulders Display', sans-serif;
+  font-weight: 900;
+  font-size: clamp(26px, 3vw, 38px);
+  line-height: 0.85;
+  letter-spacing: 0.005em;
+  color: var(--bg);
+  text-transform: uppercase;
+}
+
+.header-title h1 .accent { color: var(--accent); }
+
+.header-tag {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+  margin-top: 6px;
+}
+
+.header-profile {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.header-profile .label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  font-weight: 500;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(255, 255, 255, 0.5);
+}
+
+.profile-row {
+  display: flex;
+  gap: 6px;
+  align-items: stretch;
+}
+
+#profile-select {
+  appearance: none;
+  -webkit-appearance: none;
+  background: var(--bg-card);
+  color: var(--ink);
+  border: 2px solid var(--accent);
+  padding: 9px 32px 9px 14px;
+  font-family: 'Archivo', sans-serif;
+  font-weight: 700;
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  cursor: pointer;
+  border-radius: 0;
+  min-width: 140px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%230a0e1a' stroke-width='2' stroke-linecap='square' fill='none'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+}
+
+#profile-select:focus { outline: none; }
+
+.profile-action-btn {
+  background: transparent;
+  color: var(--bg);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  padding: 0 12px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  transition: all 0.15s;
+  cursor: pointer;
+}
+
+.profile-action-btn:hover {
+  background: var(--accent);
+  border-color: var(--accent);
+}
+
+.profile-action-btn:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+/* === SEARCH BAR === */
+#search-bar {
+  flex-shrink: 0;
+  display: flex;
+  gap: 10px;
+  padding: 14px 28px;
+  background: var(--bg-card);
+  border-bottom: 1px solid var(--rule);
+  align-items: center;
+}
+
+.search-label {
+  font-family: 'Big Shoulders Display', sans-serif;
+  font-weight: 800;
+  font-size: 22px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink);
+  padding-right: 16px;
+  border-right: 2px solid var(--ink);
+  line-height: 1;
+}
+
+#address-input {
+  flex: 1;
+  padding: 11px 14px;
+  border: 2px solid var(--rule);
+  background: var(--bg);
+  font-size: 14px;
+  color: var(--ink);
+  border-radius: 0;
+  font-weight: 500;
+  transition: border-color 0.15s;
+}
+
+#address-input::placeholder { color: var(--ink-faint); }
+#address-input:focus { outline: none; border-color: var(--ink); }
+
+.search-btn {
+  padding: 0 18px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  border: 2px solid var(--ink);
+  background: var(--bg-card);
+  color: var(--ink);
+  border-radius: 0;
+  transition: all 0.15s;
+  white-space: nowrap;
+}
+
+.search-btn:hover { background: var(--ink); color: var(--bg); }
+
+.search-btn.primary {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg-card);
+}
+
+.search-btn.primary:hover {
+  background: var(--accent-dark);
+  border-color: var(--accent-dark);
+}
+
+/* === CONTENT === */
+#content {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+#map {
+  flex: 1;
+  min-width: 0;
+  background: var(--bg);
+}
+
+/* === SIDEBAR === */
+#sidebar {
+  width: 400px;
+  background: var(--bg-card);
+  border-left: 2px solid var(--ink);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.sidebar-header {
+  padding: 22px 22px 18px;
+  border-bottom: 2px solid var(--ink);
+  flex-shrink: 0;
+}
+
+.sidebar-header .eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.sidebar-header .title {
+  font-family: 'Big Shoulders Display', sans-serif;
+  font-weight: 900;
+  font-size: 38px;
+  line-height: 0.85;
+  color: var(--ink);
+  text-transform: uppercase;
+  display: flex;
+  align-items: baseline;
+  gap: 14px;
+}
+
+.sidebar-header .count {
+  color: var(--accent);
+  font-size: 32px;
+  font-variant-numeric: tabular-nums;
+}
+
+.sidebar-actions {
+  display: flex;
+  gap: 8px;
+  padding: 14px 22px;
+  border-bottom: 1px solid var(--rule);
+  flex-shrink: 0;
+}
+
+.sidebar-actions button {
+  flex: 1;
+  padding: 12px 14px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  border: 2px solid var(--ink);
+  background: var(--bg-card);
+  color: var(--ink);
+  border-radius: 0;
+  transition: all 0.15s;
+}
+
+.sidebar-actions button:hover:not(:disabled) {
+  background: var(--ink);
+  color: var(--bg);
+}
+
+.sidebar-actions button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+#btn-generate {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--bg-card);
+  flex: 1.4;
+}
+
+#btn-generate:hover:not(:disabled) {
+  background: var(--accent-dark);
+  border-color: var(--accent-dark);
+  color: var(--bg-card);
+}
+
+#station-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px 22px 22px;
+}
+
+#station-list::-webkit-scrollbar { width: 8px; }
+#station-list::-webkit-scrollbar-track { background: transparent; }
+#station-list::-webkit-scrollbar-thumb { background: var(--rule); border-radius: 0; }
+#station-list::-webkit-scrollbar-thumb:hover { background: var(--ink-faint); }
+
+/* === EMPTY STATE === */
+.empty-state {
+  text-align: center;
+  padding: 40px 12px;
+  color: var(--ink-faint);
+}
+
+.empty-state .num {
+  font-family: 'Big Shoulders Display', sans-serif;
+  font-weight: 900;
+  font-size: 96px;
+  line-height: 0.85;
+  color: var(--accent);
+  opacity: 0.35;
+  margin-bottom: 14px;
+}
+
+.empty-state .text {
+  font-size: 14px;
+  font-weight: 500;
+  max-width: 240px;
+  margin: 0 auto;
+  line-height: 1.5;
+  color: var(--ink-soft);
+}
+
+/* === STATION ENTRY === */
+.station-entry {
+  background: var(--bg-card);
+  border: 2px solid var(--ink);
+  padding: 0;
+  margin-bottom: 10px;
+  display: flex;
+  flex-direction: column;
+  position: relative;
+  transition: transform 0.15s;
+}
+
+.station-entry::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 6px;
+  background: var(--ink-faint);
+}
+
+.station-entry.is-primary::before {
+  background: var(--accent);
+}
+
+.station-entry:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.station-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px 10px 16px;
+}
+
+.station-check {
+  flex-shrink: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--ink);
+  background: var(--bg-card);
+  cursor: pointer;
+  position: relative;
+  border-radius: 0;
+  margin: 0;
+}
+
+.station-check:checked {
+  background: var(--ink);
+}
+
+.station-check:checked::after {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 0px;
+  width: 6px;
+  height: 11px;
+  border: solid var(--bg-card);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
+}
+
+.name-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-family: 'Archivo', sans-serif;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ink);
+  padding: 4px 0;
+  min-width: 0;
+  letter-spacing: -0.005em;
+}
+
+.name-input:focus {
+  outline: none;
+  background: var(--accent-light);
+  padding: 4px 6px;
+  margin: 0 -6px;
+}
+
+.primary-pill {
+  flex-shrink: 0;
+  padding: 5px 10px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  border: 2px solid var(--ink);
+  background: var(--bg-card);
+  color: var(--ink);
+  cursor: pointer;
+  transition: all 0.15s;
+  text-transform: uppercase;
+}
+
+.primary-pill.is-primary {
+  background: var(--accent);
+  color: var(--bg-card);
+  border-color: var(--accent);
+}
+
+.primary-pill:hover { transform: translateY(-1px); }
+
+.btn-remove {
+  flex-shrink: 0;
+  background: none;
+  border: 2px solid transparent;
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-faint);
+  font-size: 18px;
+  font-weight: 700;
+  transition: all 0.15s;
+  border-radius: 0;
+  line-height: 1;
+}
+
+.btn-remove:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+/* === GROUP CONTAINER === */
+.group-container {
+  background: var(--bg-card);
+  border: 2px solid var(--ink);
+  margin-bottom: 10px;
+  position: relative;
+}
+
+.group-container::before {
+  content: '';
+  position: absolute;
+  left: 0; top: 0; bottom: 0;
+  width: 6px;
+  background: var(--ink);
+}
+
+.group-container.is-primary::before {
+  background: var(--accent);
+}
+
+.group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 12px 12px 16px;
+}
+
+.group-badge {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 8px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  background: var(--ink);
+  color: var(--bg-card);
+  padding: 4px 7px;
+  flex-shrink: 0;
+  text-transform: uppercase;
+}
+
+.group-name-input {
+  flex: 1;
+  border: none;
+  background: transparent;
+  font-family: 'Archivo', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  min-width: 0;
+  letter-spacing: -0.005em;
+  padding: 4px 0;
+}
+
+.group-name-input:focus {
+  outline: none;
+  background: var(--accent-light);
+  padding: 4px 6px;
+  margin: 0 -6px;
+}
+
+.group-toggle-arrow {
+  cursor: pointer;
+  color: var(--ink-faint);
+  user-select: none;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 0 4px;
+  flex-shrink: 0;
+  transition: color 0.15s;
+}
+
+.group-toggle-arrow:hover { color: var(--ink); }
+
+.group-members {
+  display: none;
+  border-top: 1px dashed var(--rule);
+  padding: 10px 16px;
+  background: var(--bg);
+}
+
 .group-members.expanded { display: block; }
-.group-member { padding: 3px 0; font-size: 12px; color: #555; display: flex; align-items: center; gap: 4px; }
-.group-member .btn-remove { background: none; border: none; cursor: pointer; color: #999; font-size: 14px; padding: 0 4px; }
-.group-member .btn-remove:hover { color: #d32f2f; }
-/* Modal overlay */
-.modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); display: none; align-items: center; justify-content: center; z-index: 1000; padding: 20px; }
+
+.group-member {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 12px;
+  color: var(--ink-soft);
+  font-weight: 500;
+}
+
+.group-member::before {
+  content: '└';
+  color: var(--ink-faint);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+}
+
+.group-member .btn-remove {
+  width: 20px;
+  height: 20px;
+  font-size: 14px;
+  margin-left: auto;
+}
+
+/* === MODAL === */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-overlay);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  display: none;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+  animation: fadeIn 0.2s ease-out;
+}
+
 .modal-overlay.visible { display: flex; }
-.modal-card { background: white; border-radius: 12px; box-shadow: 0 20px 60px rgba(0,0,0,0.3); max-width: 560px; width: 100%; max-height: calc(100vh - 40px); overflow-y: auto; padding: 28px 32px; position: relative; }
-.modal-card.wide { max-width: 820px; }
-.modal-card h2 { font-size: 22px; margin-bottom: 6px; color: #1976d2; }
-.modal-card .subtitle { color: #666; font-size: 14px; margin-bottom: 20px; }
-.modal-card ol { padding-left: 20px; margin-bottom: 24px; font-size: 14px; line-height: 1.7; color: #333; }
-.modal-card ol li { margin-bottom: 8px; }
-.modal-card .primary-btn { background: #1976d2; color: white; border: none; padding: 12px 24px; border-radius: 6px; font-size: 15px; font-weight: 600; cursor: pointer; width: 100%; }
-.modal-card .primary-btn:hover { background: #1565c0; }
-.modal-close { position: absolute; top: 12px; right: 16px; background: none; border: none; font-size: 28px; cursor: pointer; color: #999; padding: 4px 10px; line-height: 1; }
-.modal-close:hover { color: #333; }
 
-/* Output modal: config cards */
-#output-modal .modal-card { max-width: 820px; }
-.config-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0 24px; }
-.config-card { border: 1px solid #e0e0e0; border-radius: 8px; padding: 16px; background: #fafafa; }
-.config-card h3 { font-size: 15px; margin-bottom: 8px; color: #333; }
-.config-card .preview { background: #263238; color: #b0bec5; padding: 10px 12px; border-radius: 4px; font-size: 11px; font-family: Menlo, Monaco, monospace; margin-bottom: 10px; line-height: 1.4; overflow: hidden; height: 80px; white-space: pre; }
-.config-card .copy-btn { background: #1976d2; color: white; border: none; padding: 10px 16px; border-radius: 6px; font-size: 14px; font-weight: 600; cursor: pointer; width: 100%; }
-.config-card .copy-btn:hover { background: #1565c0; }
-.config-card .copy-btn.copied { background: #43a047; }
-#instructions-block { background: #f5f5f5; border-radius: 8px; padding: 16px 20px; font-size: 13px; line-height: 1.7; color: #333; }
-#instructions-block h3 { font-size: 15px; margin-bottom: 10px; color: #333; }
-#instructions-block ol { padding-left: 20px; }
-#instructions-block code { background: #fff; padding: 2px 6px; border-radius: 3px; font-size: 12px; border: 1px solid #ddd; font-family: Menlo, Monaco, monospace; }
-#instructions-block ul { padding-left: 18px; margin-top: 4px; }
-#instructions-block li { margin-bottom: 4px; }
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
 
-@media (max-width: 640px) {
-  .config-cards { grid-template-columns: 1fr; }
-  .modal-card { padding: 24px 20px; }
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.modal-card {
+  background: var(--bg-card);
+  max-width: 580px;
+  width: 100%;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+  position: relative;
+  border: 3px solid var(--ink);
+  box-shadow: 8px 8px 0 var(--ink);
+  animation: slideUp 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.modal-card.wide { max-width: 880px; }
+
+.modal-header {
+  padding: 36px 40px 28px;
+  border-bottom: 3px solid var(--ink);
+  position: relative;
+  background: var(--bg-card);
+}
+
+.modal-header .eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 10px;
+}
+
+.modal-header h2 {
+  font-family: 'Big Shoulders Display', sans-serif;
+  font-weight: 900;
+  font-size: clamp(40px, 5vw, 56px);
+  line-height: 0.82;
+  color: var(--ink);
+  margin-bottom: 12px;
+  text-transform: uppercase;
+  letter-spacing: -0.01em;
+}
+
+.modal-header h2 .accent { color: var(--accent); }
+
+.modal-header .subtitle {
+  font-size: 15px;
+  color: var(--ink-soft);
+  line-height: 1.55;
+  max-width: 500px;
+  font-weight: 500;
+}
+
+.modal-close {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  background: var(--bg-card);
+  border: 2px solid var(--ink);
+  width: 38px;
+  height: 38px;
+  font-size: 18px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+  border-radius: 0;
+  color: var(--ink);
+  line-height: 1;
+}
+
+.modal-close:hover {
+  background: var(--ink);
+  color: var(--bg);
+  transform: rotate(90deg);
+}
+
+.modal-body {
+  padding: 32px 40px 40px;
+  background: var(--bg-card);
+}
+
+/* === WELCOME STEPS === */
+.welcome-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  margin-bottom: 32px;
+}
+
+.welcome-step {
+  display: flex;
+  gap: 22px;
+  align-items: flex-start;
+  animation: slideUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) backwards;
+}
+
+.welcome-step:nth-child(1) { animation-delay: 0.15s; }
+.welcome-step:nth-child(2) { animation-delay: 0.25s; }
+.welcome-step:nth-child(3) { animation-delay: 0.35s; }
+
+.step-num {
+  font-family: 'Big Shoulders Display', sans-serif;
+  font-weight: 900;
+  font-size: 64px;
+  line-height: 0.8;
+  color: var(--accent);
+  flex-shrink: 0;
+  width: 70px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.step-content {
+  flex: 1;
+  padding-top: 6px;
+}
+
+.step-title {
+  font-family: 'Big Shoulders Display', sans-serif;
+  font-weight: 800;
+  font-size: 24px;
+  letter-spacing: 0.005em;
+  color: var(--ink);
+  text-transform: uppercase;
+  margin-bottom: 4px;
+  line-height: 1;
+}
+
+.step-desc {
+  font-size: 14px;
+  color: var(--ink-soft);
+  line-height: 1.55;
+  font-weight: 500;
+}
+
+.primary-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  width: 100%;
+  padding: 20px 24px;
+  background: var(--accent);
+  color: var(--bg-card);
+  border: 3px solid var(--ink);
+  box-shadow: 5px 5px 0 var(--ink);
+  font-family: 'Big Shoulders Display', sans-serif;
+  font-weight: 800;
+  font-size: 26px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  transition: all 0.15s;
+  border-radius: 0;
+  animation: slideUp 0.5s cubic-bezier(0.2, 0.8, 0.2, 1) 0.45s backwards;
+}
+
+.primary-cta:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 7px 7px 0 var(--ink);
+  background: var(--accent-dark);
+}
+
+.primary-cta:active {
+  transform: translate(2px, 2px);
+  box-shadow: 1px 1px 0 var(--ink);
+}
+
+.primary-cta .arrow { font-size: 22px; }
+
+/* === OUTPUT MODAL === */
+.config-cards {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  margin-bottom: 28px;
+}
+
+.config-card {
+  background: var(--bg);
+  border: 2px solid var(--ink);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+}
+
+.config-card .card-eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.config-card h3 {
+  font-family: 'Big Shoulders Display', sans-serif;
+  font-weight: 900;
+  font-size: 38px;
+  line-height: 0.85;
+  color: var(--ink);
+  margin-bottom: 16px;
+  text-transform: uppercase;
+}
+
+.config-card .preview {
+  background: var(--ink);
+  color: #b4d8ff;
+  padding: 14px 16px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  line-height: 1.55;
+  flex: 1;
+  margin-bottom: 16px;
+  overflow: hidden;
+  white-space: pre;
+  height: 100px;
+  border: 2px solid var(--ink);
+}
+
+.config-card .copy-btn {
+  width: 100%;
+  padding: 14px 16px;
+  background: var(--bg-card);
+  color: var(--ink);
+  border: 2px solid var(--ink);
+  box-shadow: 3px 3px 0 var(--ink);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  transition: all 0.15s;
+  border-radius: 0;
+}
+
+.config-card .copy-btn:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0 var(--ink);
+  background: var(--ink);
+  color: var(--bg-card);
+}
+
+.config-card .copy-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0 0 0 var(--ink);
+}
+
+.config-card .copy-btn.copied {
+  background: var(--success);
+  color: var(--bg-card);
+  border-color: var(--success);
+  box-shadow: 3px 3px 0 var(--ink);
+}
+
+/* === INSTRUCTIONS === */
+.instructions {
+  background: var(--bg);
+  border: 2px solid var(--ink);
+  padding: 26px 30px;
+}
+
+.instructions .eyebrow {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 6px;
+}
+
+.instructions h3 {
+  font-family: 'Big Shoulders Display', sans-serif;
+  font-weight: 800;
+  font-size: 30px;
+  line-height: 0.9;
+  color: var(--ink);
+  margin-bottom: 18px;
+  text-transform: uppercase;
+}
+
+.instructions ol {
+  list-style: none;
+  counter-reset: step;
+  margin: 0;
+  padding: 0;
+}
+
+.instructions ol > li {
+  counter-increment: step;
+  position: relative;
+  padding-left: 44px;
+  margin-bottom: 16px;
+  font-size: 13.5px;
+  line-height: 1.6;
+  color: var(--ink-soft);
+  font-weight: 500;
+}
+
+.instructions ol > li::before {
+  content: counter(step, decimal-leading-zero);
+  position: absolute;
+  left: 0;
+  top: 0;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent);
+  border: 2px solid var(--accent);
+  width: 28px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: 0.04em;
+}
+
+.instructions ol > li strong {
+  color: var(--ink);
+  font-weight: 700;
+}
+
+.instructions ol > li code {
+  background: var(--bg-card);
+  border: 1px solid var(--rule);
+  padding: 1px 6px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  color: var(--ink);
+  word-break: break-all;
+}
+
+.instructions ul {
+  margin-top: 8px;
+  padding-left: 0;
+  list-style: none;
+}
+
+.instructions ul li {
+  margin-bottom: 5px;
+  position: relative;
+  padding-left: 18px;
+}
+
+.instructions ul li::before {
+  content: '→';
+  position: absolute;
+  left: 0;
+  color: var(--accent);
+  font-weight: 700;
+}
+
+/* === LEAFLET CUSTOM === */
+.leaflet-popup-content-wrapper {
+  border-radius: 0 !important;
+  border: 2px solid var(--ink);
+  box-shadow: 4px 4px 0 var(--ink);
+  background: var(--bg-card);
+  padding: 0;
+}
+
+.leaflet-popup-content {
+  margin: 14px 16px !important;
+  font-family: 'Archivo', sans-serif;
+  font-size: 13px;
+}
+
+.leaflet-popup-tip {
+  background: var(--bg-card) !important;
+  border-right: 2px solid var(--ink);
+  border-bottom: 2px solid var(--ink);
+}
+
+.leaflet-popup-close-button {
+  font-size: 20px !important;
+  color: var(--ink) !important;
+  padding: 4px 8px !important;
+}
+
+.popup-title {
+  font-family: 'Archivo', sans-serif;
+  font-weight: 700;
+  font-size: 14px;
+  color: var(--ink);
+  margin-bottom: 4px;
+  padding-right: 12px;
+}
+
+.popup-id {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 9px;
+  color: var(--ink-faint);
+  letter-spacing: 0.05em;
+  margin-bottom: 10px;
+  word-break: break-all;
+}
+
+.popup-btn {
+  display: block;
+  width: 100%;
+  padding: 8px 14px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  border: 2px solid var(--ink);
+  background: var(--accent);
+  color: var(--bg-card);
+  cursor: pointer;
+  transition: all 0.15s;
+  border-radius: 0;
+}
+
+.popup-btn:hover { background: var(--accent-dark); }
+
+.popup-btn.remove {
+  background: var(--bg-card);
+  color: var(--ink);
+}
+
+.popup-btn.remove:hover {
+  background: var(--ink);
+  color: var(--bg-card);
+}
+
+.leaflet-control-zoom {
+  border: none !important;
+  box-shadow: none !important;
+  margin: 16px !important;
+}
+
+.leaflet-control-zoom a {
+  border-radius: 0 !important;
+  border: 2px solid var(--ink) !important;
+  background: var(--bg-card) !important;
+  color: var(--ink) !important;
+  font-family: 'Archivo', sans-serif !important;
+  font-weight: 700 !important;
+  width: 34px !important;
+  height: 34px !important;
+  line-height: 30px !important;
+  font-size: 18px !important;
+  box-shadow: 2px 2px 0 var(--ink);
+}
+
+.leaflet-control-zoom a:hover {
+  background: var(--ink) !important;
+  color: var(--bg-card) !important;
+}
+
+.leaflet-control-zoom a:first-child { margin-bottom: 4px !important; }
+
+.leaflet-control-attribution {
+  background: var(--bg-card) !important;
+  border: 1px solid var(--rule) !important;
+  font-family: 'Archivo', sans-serif !important;
+  font-size: 10px !important;
+  padding: 3px 8px !important;
+  color: var(--ink-soft) !important;
+}
+
+.leaflet-control-attribution a { color: var(--accent) !important; }
+
+/* === MOBILE === */
+@media (max-width: 900px) {
+  #header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 16px 18px 14px;
+  }
+  .header-brand { width: 100%; }
+  .header-tag { display: none; }
+  .header-profile { width: 100%; }
+  .profile-row { width: 100%; }
+  #profile-select { flex: 1; min-width: 0; }
 }
 
 @media (max-width: 768px) {
+  #search-bar {
+    flex-wrap: wrap;
+    padding: 12px 18px;
+    gap: 8px;
+  }
+  .search-label { display: none; }
+  #address-input { flex: 1 0 100%; order: -1; }
+
   #content { flex-direction: column; }
-  #map { flex: none; height: 50vh; }
-  #sidebar { width: 100%; flex: 1; border-left: none; border-top: 1px solid #ddd; }
-  #search-bar { flex-wrap: wrap; }
-  #search-bar input { min-width: 150px; }
+  #map { height: 50vh; flex: none; }
+  #sidebar { width: 100%; flex: 1; border-left: none; border-top: 3px solid var(--ink); }
+
+  .modal-header { padding: 28px 24px 20px; }
+  .modal-header h2 { font-size: 36px; }
+  .modal-body { padding: 24px; }
+  .config-cards { grid-template-columns: 1fr; }
+
+  .step-num { font-size: 48px; width: 56px; }
+  .step-title { font-size: 20px; }
 }
 </style>
 </head>
 <body>
 
-<div id="header">Citi Bike Station Picker</div>
+<header id="header">
+  <div class="header-brand">
+    <svg class="bike-icon" width="44" height="44" viewBox="0 0 44 44" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="11" cy="30" r="7"/>
+      <circle cx="33" cy="30" r="7"/>
+      <path d="M11 30 L20 14 L29 30"/>
+      <path d="M20 14 L26 14"/>
+      <path d="M30 14 L33 30"/>
+      <line x1="29" y1="14" x2="32" y2="14"/>
+    </svg>
+    <div class="header-title">
+      <h1>Citi Bike<br><span class="accent">Station Picker</span></h1>
+      <span class="header-tag">PICK · CONFIGURE · SHORTCUT IT</span>
+    </div>
+  </div>
+  <div class="header-profile">
+    <span class="label">PROFILE</span>
+    <div class="profile-row">
+      <select id="profile-select"></select>
+      <button class="profile-action-btn" id="btn-new-profile">+ New</button>
+      <button class="profile-action-btn" id="btn-rename-profile">Rename</button>
+      <button class="profile-action-btn" id="btn-delete-profile">Delete</button>
+    </div>
+  </div>
+</header>
 
 <div id="search-bar">
-  <input type="text" id="address-input" placeholder="Search address..." />
-  <button id="btn-search">Search</button>
-  <button id="btn-location">My Location</button>
+  <span class="search-label">Find</span>
+  <input type="text" id="address-input" placeholder="Search address or intersection..." />
+  <button class="search-btn" id="btn-search">Search</button>
+  <button class="search-btn primary" id="btn-location">⊙ My Location</button>
 </div>
 
 <div id="content">
   <div id="map"></div>
-  <div id="sidebar">
-    <div id="sidebar-header">Selected Stations <span id="station-count">(0)</span></div>
-    <div id="profile-bar">
-      <select id="profile-select"></select>
-      <button id="btn-new-profile">New</button>
-      <button id="btn-rename-profile">Rename</button>
-      <button id="btn-delete-profile">Delete</button>
+  <aside id="sidebar">
+    <div class="sidebar-header">
+      <div class="eyebrow">Your Profile</div>
+      <div class="title">Selected <span class="count" id="station-count">00</span></div>
     </div>
-    <div id="sidebar-actions">
-      <button id="btn-group" disabled>Group Checked</button>
-      <button id="btn-generate" disabled>Generate Config</button>
+    <div class="sidebar-actions">
+      <button id="btn-group" disabled>⊟ Group</button>
+      <button id="btn-generate" disabled>Generate Config →</button>
     </div>
-    <div id="station-list">
-      <div class="empty-state" id="empty-state">Click stations on the map to add them here.</div>
-    </div>
-  </div>
+    <div id="station-list"></div>
+  </aside>
 </div>
 
 <!-- Welcome modal -->
 <div id="welcome-modal" class="modal-overlay">
   <div class="modal-card">
-    <h2>Citi Bike Station Picker</h2>
-    <p class="subtitle">Set up Siri to check bike and dock availability at your favorite stations.</p>
-    <ol>
-      <li><strong>Find your stations.</strong> Search for an address or use your location, then click station markers on the map to add them to your profile.</li>
-      <li><strong>Mark your primary stations.</strong> The ones closest to you. Backup stations only show when primary availability is low.</li>
-      <li><strong>Generate a config</strong> and paste it into a Siri Shortcut. Then say "Hey Siri, Citi bike work docks" to hear availability.</li>
-    </ol>
-    <button class="primary-btn" id="btn-welcome-dismiss">Get Started</button>
+    <div class="modal-header">
+      <div class="eyebrow">Citi Bike × Siri</div>
+      <h2>Hey,<br>welcome <span class="accent">aboard.</span></h2>
+      <p class="subtitle">Set up Siri to check bike and dock availability at your favorite Citi Bike stations in three quick steps.</p>
+    </div>
+    <div class="modal-body">
+      <div class="welcome-steps">
+        <div class="welcome-step">
+          <div class="step-num">01</div>
+          <div class="step-content">
+            <div class="step-title">Find your stations</div>
+            <div class="step-desc">Search for an address or use your location, then click station markers on the map to add them to your profile.</div>
+          </div>
+        </div>
+        <div class="welcome-step">
+          <div class="step-num">02</div>
+          <div class="step-content">
+            <div class="step-title">Mark your favorites</div>
+            <div class="step-desc">Set the stations closest to you as primary. Backup stations only appear when primary availability is low.</div>
+          </div>
+        </div>
+        <div class="welcome-step">
+          <div class="step-num">03</div>
+          <div class="step-content">
+            <div class="step-title">Shortcut it</div>
+            <div class="step-desc">Generate a config and paste it into a Siri Shortcut. Then say "Hey Siri, Citi bike work docks" to hear availability.</div>
+          </div>
+        </div>
+      </div>
+      <button class="primary-cta" id="btn-welcome-dismiss">
+        Get Started <span class="arrow">→</span>
+      </button>
+    </div>
   </div>
 </div>
 
 <!-- Output modal -->
 <div id="output-modal" class="modal-overlay">
   <div class="modal-card wide">
-    <button class="modal-close" id="btn-output-close" title="Close">&times;</button>
-    <h2>Your Shortcut Config</h2>
-    <p class="subtitle">Copy one of the configs below, then follow the setup instructions to create your Siri Shortcut.</p>
-    <div class="config-cards">
-      <div class="config-card">
-        <h3>Docks (for parking)</h3>
-        <div class="preview" id="docks-preview"></div>
-        <button class="copy-btn" id="btn-copy-docks">Copy Docks Config</button>
-      </div>
-      <div class="config-card">
-        <h3>Bikes (for riding)</h3>
-        <div class="preview" id="bikes-preview"></div>
-        <button class="copy-btn" id="btn-copy-bikes">Copy Bikes Config</button>
-      </div>
+    <button class="modal-close" id="btn-output-close" title="Close">✕</button>
+    <div class="modal-header">
+      <div class="eyebrow">Your Shortcut Config</div>
+      <h2>Ready to <span class="accent">roll.</span></h2>
+      <p class="subtitle">Copy one of the configs below, then follow the setup instructions to wire up your Siri Shortcut.</p>
     </div>
-    <div id="instructions-block">
-      <h3>Siri Shortcut Setup</h3>
-      <ol>
-        <li>Open the <strong>Shortcuts</strong> app on your iPhone and tap <strong>+</strong></li>
-        <li>Name it (e.g., "Citi bike work docks")</li>
-        <li>Add action: <strong>Text</strong> — paste the copied JSON config into the text block</li>
-        <li>Add action: <strong>Get Contents of URL</strong>
-          <ul>
-            <li>URL: <code id="instr-url"></code></li>
-            <li>Method: <strong>POST</strong></li>
-            <li>Headers: add key <code>Content-Type</code> with value <code>application/json</code></li>
-            <li>Request Body: change to <strong>File</strong>, then tap the field and select <strong>Text</strong> (the output from step 3)</li>
-          </ul>
-        </li>
-        <li>Add action: <strong>Speak Text</strong> — set it to speak the result from step 4</li>
-        <li>Done! Trigger with "Hey Siri, Citi bike work docks"</li>
-      </ol>
+    <div class="modal-body">
+      <div class="config-cards">
+        <div class="config-card">
+          <div class="card-eyebrow">For Parking</div>
+          <h3>Docks</h3>
+          <div class="preview" id="docks-preview"></div>
+          <button class="copy-btn" id="btn-copy-docks">↗ Copy Docks Config</button>
+        </div>
+        <div class="config-card">
+          <div class="card-eyebrow">For Riding</div>
+          <h3>Bikes</h3>
+          <div class="preview" id="bikes-preview"></div>
+          <button class="copy-btn" id="btn-copy-bikes">↗ Copy Bikes Config</button>
+        </div>
+      </div>
+      <div class="instructions">
+        <div class="eyebrow">Setup</div>
+        <h3>Siri Shortcut Instructions</h3>
+        <ol>
+          <li>Open the <strong>Shortcuts</strong> app on your iPhone and tap <strong>+</strong></li>
+          <li>Name it (e.g., "Citi bike work docks")</li>
+          <li>Add action: <strong>Text</strong> — paste the copied JSON config into the text block</li>
+          <li>Add action: <strong>Get Contents of URL</strong>
+            <ul>
+              <li>URL: <code id="instr-url"></code></li>
+              <li>Method: <strong>POST</strong></li>
+              <li>Headers: add key <code>Content-Type</code> with value <code>application/json</code></li>
+              <li>Request Body: change to <strong>File</strong>, then tap the field and select <strong>Text</strong> (the output from step 3)</li>
+            </ul>
+          </li>
+          <li>Add action: <strong>Speak Text</strong> — set it to speak the result from step 4</li>
+          <li>Done! Trigger with "Hey Siri, Citi bike work docks"</li>
+        </ol>
+      </div>
     </div>
   </div>
 </div>
@@ -199,7 +1316,6 @@ document.getElementById('btn-welcome-dismiss').addEventListener('click', () => {
 document.getElementById('btn-output-close').addEventListener('click', () => {
   document.getElementById('output-modal').classList.remove('visible');
 });
-// Close output modal on backdrop click
 document.getElementById('output-modal').addEventListener('click', (e) => {
   if (e.target.id === 'output-modal') {
     document.getElementById('output-modal').classList.remove('visible');
@@ -208,13 +1324,13 @@ document.getElementById('output-modal').addEventListener('click', (e) => {
 
 // State
 let stations = [];
-let selectedStations = []; // { id, name, displayName, primary }
-let groups = []; // { id, name, memberIds: [], primary }
-let markerMap = {}; // stationId -> marker
+let selectedStations = [];
+let groups = [];
+let markerMap = {};
 let currentProfileName = 'default';
 
-const selectedColor = '#43a047';
-const defaultColor = '#e65100';
+const selectedColor = '#2d8f3f';
+const defaultColor = '#e85d2f';
 
 // === Profile / localStorage management ===
 const STORAGE_KEY = 'citibike-profiles';
@@ -236,16 +1352,12 @@ function saveCurrentProfile() {
 }
 
 function loadProfile(name) {
-  // Clear current markers
   selectedStations.forEach(s => updateMarkerColor(s.id, false));
-
   const profiles = loadAllProfiles();
   const data = profiles[name] || { selectedStations: [], groups: [] };
   selectedStations = data.selectedStations || [];
   groups = data.groups || [];
   currentProfileName = name;
-
-  // Update marker colors for loaded profile
   selectedStations.forEach(s => updateMarkerColor(s.id, true));
   renderSidebar();
 }
@@ -276,7 +1388,6 @@ function initProfiles() {
   renderProfileSelect();
 }
 
-// Profile UI events
 document.getElementById('profile-select').addEventListener('change', function() {
   saveCurrentProfile();
   loadProfile(this.value);
@@ -288,9 +1399,7 @@ document.getElementById('btn-new-profile').addEventListener('click', () => {
   let name = 'work';
   let i = 1;
   while (profiles[name]) { name = 'profile ' + (++i); }
-  // Save current first
   saveCurrentProfile();
-  // Create new empty profile
   currentProfileName = name;
   selectedStations.forEach(s => updateMarkerColor(s.id, false));
   selectedStations = [];
@@ -298,7 +1407,6 @@ document.getElementById('btn-new-profile').addEventListener('click', () => {
   saveCurrentProfile();
   renderProfileSelect();
   renderSidebar();
-  // Let user rename immediately
   const select = document.getElementById('profile-select');
   select.value = name;
   document.getElementById('btn-rename-profile').click();
@@ -310,7 +1418,7 @@ document.getElementById('btn-rename-profile').addEventListener('click', () => {
   const input = document.createElement('input');
   input.type = 'text';
   input.value = oldName;
-  input.style.cssText = 'flex:1;padding:5px 8px;border:1px solid #1976d2;border-radius:4px;font-size:13px;outline:none;';
+  input.style.cssText = 'flex:1;padding:9px 14px;border:2px solid #e85d2f;background:#fffcf3;font-family:Archivo,sans-serif;font-weight:700;font-size:13px;outline:none;min-width:140px;color:#0a0e1a;';
   select.replaceWith(input);
   input.select();
   input.focus();
@@ -343,7 +1451,7 @@ document.getElementById('btn-delete-profile').addEventListener('click', () => {
   renderProfileSelect();
 });
 
-// Init map
+// === MAP ===
 const map = L.map('map').setView([40.7580, -73.9785], 14);
 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
   attribution: '&copy; OpenStreetMap contributors',
@@ -364,9 +1472,9 @@ fetch('stations.json')
     data.forEach(station => {
       const marker = L.circleMarker([station.lat, station.lon], {
         radius: 7,
-        color: '#fff',
+        color: '#fffcf3',
         fillColor: defaultColor,
-        fillOpacity: 0.9,
+        fillOpacity: 0.95,
         weight: 2
       });
       marker.stationId = station.id;
@@ -375,28 +1483,25 @@ fetch('stations.json')
       clusterGroup.addLayer(marker);
       markerMap[station.id] = marker;
     });
-    // Restore saved profile after markers are created
     initProfiles();
     loadProfile(currentProfileName);
   })
   .catch(err => {
     console.error('Failed to load stations:', err);
-    const list = document.getElementById('station-list');
-    list.innerHTML = '<div style="color:red;padding:16px;font-size:14px;">Failed to load station data. Please refresh the page.</div>';
+    document.getElementById('station-list').innerHTML =
+      '<div class="empty-state"><div class="num">!!</div><div class="text" style="color:#c54a20">Failed to load station data. Please refresh the page.</div></div>';
   });
 
 function openPopup(marker, station) {
   const isSelected = selectedStations.some(s => s.id === station.id);
-  const btnLabel = isSelected ? 'Remove' : 'Add to Profile';
-  const btnClass = isSelected ? 'color:#d32f2f' : 'color:#1976d2';
-  const popup = L.popup({ closeOnClick: false })
+  const btnLabel = isSelected ? 'Remove' : '+ Add to Profile';
+  const btnClass = isSelected ? 'popup-btn remove' : 'popup-btn';
+  L.popup({ closeOnClick: false })
     .setLatLng(marker.getLatLng())
     .setContent(
-      '<div style="min-width:180px">' +
-      '<strong>' + escapeHtml(station.name) + '</strong><br>' +
-      '<span style="font-size:11px;color:#666">ID: ' + escapeHtml(station.id) + '</span><br>' +
-      '<button onclick="toggleStation(\'' + escapeAttr(station.id) + '\')" style="margin-top:6px;padding:4px 10px;border:1px solid #ccc;border-radius:3px;cursor:pointer;background:white;font-size:12px;' + btnClass + '">' + btnLabel + '</button>' +
-      '</div>'
+      '<div class="popup-title">' + escapeHtml(station.name) + '</div>' +
+      '<div class="popup-id">ID: ' + escapeHtml(station.id) + '</div>' +
+      '<button class="' + btnClass + '" onclick="toggleStation(\'' + escapeAttr(station.id) + '\')">' + btnLabel + '</button>'
     )
     .openOn(map);
 }
@@ -405,6 +1510,10 @@ function escapeHtml(str) {
   const div = document.createElement('div');
   div.textContent = str;
   return div.innerHTML;
+}
+
+function escapeAttr(str) {
+  return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 function toggleStation(stationId) {
@@ -420,7 +1529,6 @@ function toggleStation(stationId) {
 function addStation(stationId) {
   const station = stations.find(s => s.id === stationId);
   if (!station || selectedStations.some(s => s.id === stationId)) return;
-
   const totalCount = selectedStations.length;
   selectedStations.push({
     id: station.id,
@@ -428,20 +1536,16 @@ function addStation(stationId) {
     displayName: station.name,
     primary: totalCount < 2
   });
-
   updateMarkerColor(stationId, true);
   renderSidebar();
   saveCurrentProfile();
 }
 
 function removeStation(stationId) {
-  // Remove from any group
   groups.forEach(g => {
     g.memberIds = g.memberIds.filter(id => id !== stationId);
   });
-  // Remove empty groups
   groups = groups.filter(g => g.memberIds.length > 0);
-
   selectedStations = selectedStations.filter(s => s.id !== stationId);
   updateMarkerColor(stationId, false);
   renderSidebar();
@@ -452,36 +1556,39 @@ function updateMarkerColor(stationId, selected) {
   const marker = markerMap[stationId];
   if (marker) {
     const color = selected ? selectedColor : defaultColor;
-    marker.setStyle({ color: color, fillColor: color });
+    marker.setStyle({ color: '#fffcf3', fillColor: color });
   }
 }
 
 function renderSidebar() {
   const list = document.getElementById('station-list');
-  const emptyState = document.getElementById('empty-state');
   const countEl = document.getElementById('station-count');
   const btnGroup = document.getElementById('btn-group');
   const btnGenerate = document.getElementById('btn-generate');
 
-  countEl.textContent = '(' + selectedStations.length + ')';
+  countEl.textContent = String(selectedStations.length).padStart(2, '0');
   btnGenerate.disabled = selectedStations.length === 0;
 
   if (selectedStations.length === 0) {
-    list.innerHTML = '<div class="empty-state">Click stations on the map to add them here.</div>';
+    list.innerHTML = '<div class="empty-state"><div class="num">01</div><div class="text">Click stations on the map to start building your profile.</div></div>';
     btnGroup.disabled = true;
     return;
   }
 
   let html = '';
+  const groupedIds = new Set();
+  groups.forEach(g => g.memberIds.forEach(id => groupedIds.add(id)));
 
   // Render groups
-  groups.forEach((group, gi) => {
-    html += '<div class="group-container" data-group-id="' + group.id + '">';
+  groups.forEach((group) => {
+    const primaryClass = group.primary ? 'is-primary' : '';
+    html += '<div class="group-container ' + primaryClass + '" data-group-id="' + escapeAttr(group.id) + '">';
     html += '<div class="group-header">';
-    html += '<span class="toggle-arrow" onclick="toggleGroupExpand(this)">[+]</span>';
+    html += '<span class="group-badge">GROUP</span>';
     html += '<input class="group-name-input" type="text" data-group-id="' + escapeAttr(group.id) + '" value="' + escapeAttr(group.name) + '" onchange="updateGroupName(\'' + escapeAttr(group.id) + '\', this.value)" />';
-    html += '<label><input type="checkbox" ' + (group.primary ? 'checked' : '') + ' onchange="toggleGroupPrimary(\'' + escapeAttr(group.id) + '\', this.checked)" /> Primary</label>';
-    html += '<button class="btn-remove" onclick="removeGroup(\'' + escapeAttr(group.id) + '\')" title="Remove group">x</button>';
+    html += '<button class="primary-pill ' + (group.primary ? 'is-primary' : '') + '" onclick="toggleGroupPrimary(\'' + escapeAttr(group.id) + '\')" title="Toggle primary/backup">' + (group.primary ? 'PRIMARY' : 'BACKUP') + '</button>';
+    html += '<span class="group-toggle-arrow" onclick="toggleGroupExpand(this)">[+]</span>';
+    html += '<button class="btn-remove" onclick="removeGroup(\'' + escapeAttr(group.id) + '\')" title="Remove group">×</button>';
     html += '</div>';
     html += '<div class="group-members">';
     group.memberIds.forEach(mid => {
@@ -489,7 +1596,7 @@ function renderSidebar() {
       if (s) {
         html += '<div class="group-member">';
         html += escapeHtml(s.displayName);
-        html += '<button class="btn-remove" onclick="removeFromGroup(\'' + escapeAttr(group.id) + '\', \'' + escapeAttr(mid) + '\')" title="Remove from group">x</button>';
+        html += '<button class="btn-remove" onclick="removeFromGroup(\'' + escapeAttr(group.id) + '\', \'' + escapeAttr(mid) + '\')" title="Remove from group">×</button>';
         html += '</div>';
       }
     });
@@ -497,16 +1604,16 @@ function renderSidebar() {
   });
 
   // Render ungrouped stations
-  const groupedIds = new Set();
-  groups.forEach(g => g.memberIds.forEach(id => groupedIds.add(id)));
-
-  selectedStations.forEach((s, i) => {
+  selectedStations.forEach((s) => {
     if (groupedIds.has(s.id)) return;
-    html += '<div class="station-entry">';
-    html += '<input type="checkbox" class="station-check" data-id="' + s.id + '" onchange="updateGroupButton()" />';
+    const primaryClass = s.primary ? 'is-primary' : '';
+    html += '<div class="station-entry ' + primaryClass + '">';
+    html += '<div class="station-row">';
+    html += '<input type="checkbox" class="station-check" data-id="' + escapeAttr(s.id) + '" onchange="updateGroupButton()" title="Select for grouping" />';
     html += '<input class="name-input" type="text" value="' + escapeAttr(s.displayName) + '" onchange="updateDisplayName(\'' + escapeAttr(s.id) + '\', this.value)" />';
-    html += '<label><input type="checkbox" ' + (s.primary ? 'checked' : '') + ' onchange="togglePrimary(\'' + escapeAttr(s.id) + '\', this.checked)" /> Primary</label>';
-    html += '<button class="btn-remove" onclick="removeStation(\'' + escapeAttr(s.id) + '\')" title="Remove">x</button>';
+    html += '<button class="primary-pill ' + (s.primary ? 'is-primary' : '') + '" onclick="togglePrimary(\'' + escapeAttr(s.id) + '\')" title="Toggle primary/backup">' + (s.primary ? 'PRIMARY' : 'BACKUP') + '</button>';
+    html += '<button class="btn-remove" onclick="removeStation(\'' + escapeAttr(s.id) + '\')" title="Remove">×</button>';
+    html += '</div>';
     html += '</div>';
   });
 
@@ -514,23 +1621,19 @@ function renderSidebar() {
   updateGroupButton();
 }
 
-function escapeAttr(str) {
-  return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
-}
-
 function updateDisplayName(stationId, newName) {
   const s = selectedStations.find(st => st.id === stationId);
   if (s) { s.displayName = newName; saveCurrentProfile(); }
 }
 
-function togglePrimary(stationId, checked) {
+function togglePrimary(stationId) {
   const s = selectedStations.find(st => st.id === stationId);
-  if (s) { s.primary = checked; saveCurrentProfile(); }
+  if (s) { s.primary = !s.primary; saveCurrentProfile(); renderSidebar(); }
 }
 
-function toggleGroupPrimary(groupId, checked) {
+function toggleGroupPrimary(groupId) {
   const g = groups.find(gr => gr.id === groupId);
-  if (g) { g.primary = checked; saveCurrentProfile(); }
+  if (g) { g.primary = !g.primary; saveCurrentProfile(); renderSidebar(); }
 }
 
 function updateGroupName(groupId, newName) {
@@ -545,7 +1648,7 @@ function toggleGroupExpand(arrowEl) {
     arrowEl.textContent = '[+]';
   } else {
     members.classList.add('expanded');
-    arrowEl.textContent = '[-]';
+    arrowEl.textContent = '[−]';
   }
 }
 
@@ -576,14 +1679,10 @@ function updateGroupButton() {
 document.getElementById('btn-group').addEventListener('click', () => {
   const checks = document.querySelectorAll('.station-check:checked');
   if (checks.length < 2) return;
-
   const memberIds = [];
   checks.forEach(cb => memberIds.push(cb.dataset.id));
-
-  // Use the first member's name as default group name
   const firstMember = selectedStations.find(s => s.id === memberIds[0]);
   const defaultName = firstMember ? firstMember.displayName : 'New Group';
-
   const groupId = 'group-' + Date.now();
   groups.push({
     id: groupId,
@@ -591,25 +1690,20 @@ document.getElementById('btn-group').addEventListener('click', () => {
     memberIds: memberIds,
     primary: false
   });
-
   renderSidebar();
   saveCurrentProfile();
-
-  // Focus the group name input so user can rename it
-  const nameInput = document.querySelector('[data-group-id="' + groupId + '"]');
+  const nameInput = document.querySelector('input[data-group-id="' + groupId + '"]');
   if (nameInput) { nameInput.select(); nameInput.focus(); }
 });
 
-// Store generated configs for copy buttons
+// Generate config
 let lastDocksConfig = '';
 let lastBikesConfig = '';
 
 function previewText(jsonStr) {
-  // First 4 lines of the pretty JSON
   return jsonStr.split('\n').slice(0, 4).join('\n') + '\n  ...';
 }
 
-// Generate config
 document.getElementById('btn-generate').addEventListener('click', () => {
   const profile = buildProfile();
   lastDocksConfig = JSON.stringify({ q: 'docks', profile: profile }, null, 2);
@@ -626,7 +1720,6 @@ function buildProfile() {
   const groupedIds = new Set();
   groups.forEach(g => g.memberIds.forEach(id => groupedIds.add(id)));
 
-  // Add groups
   groups.forEach(g => {
     const entry = {
       name: g.name,
@@ -639,7 +1732,6 @@ function buildProfile() {
     profile.push(entry);
   });
 
-  // Add ungrouped stations
   selectedStations.forEach(s => {
     if (groupedIds.has(s.id)) return;
     const entry = { name: s.displayName, id: s.id };
@@ -661,15 +1753,14 @@ document.getElementById('btn-copy-bikes').addEventListener('click', function() {
 function copyText(text, btn) {
   const original = btn.textContent;
   const showSuccess = () => {
-    btn.textContent = 'Copied!';
+    btn.textContent = '✓ Copied!';
     btn.classList.add('copied');
     setTimeout(() => {
       btn.textContent = original;
       btn.classList.remove('copied');
-    }, 1500);
+    }, 1800);
   };
   navigator.clipboard.writeText(text).then(showSuccess).catch(() => {
-    // Fallback
     const ta = document.createElement('textarea');
     ta.value = text;
     document.body.appendChild(ta);
@@ -680,7 +1771,7 @@ function copyText(text, btn) {
   });
 }
 
-// Address search via Nominatim
+// Address search
 document.getElementById('btn-search').addEventListener('click', searchAddress);
 document.getElementById('address-input').addEventListener('keydown', e => {
   if (e.key === 'Enter') searchAddress();
@@ -689,7 +1780,6 @@ document.getElementById('address-input').addEventListener('keydown', e => {
 function searchAddress() {
   const query = document.getElementById('address-input').value.trim();
   if (!query) return;
-
   fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(query), {
     headers: { 'User-Agent': 'CitiBikeStationPicker/1.0' }
   })
