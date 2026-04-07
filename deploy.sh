@@ -3,6 +3,7 @@ set -euo pipefail
 
 STACK_NAME="${STACK_NAME:-citibike-checker}"
 REGION="${AWS_REGION:-us-east-1}"
+export AWS_PROFILE="${AWS_PROFILE:-josh-personal}"
 
 sam build --use-container
 sam deploy \
