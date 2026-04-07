@@ -651,6 +651,61 @@ input, select { font-family: inherit; }
   margin-left: auto;
 }
 
+/* === TOAST === */
+.toast {
+  position: fixed;
+  bottom: 28px;
+  left: 50%;
+  transform: translateX(-50%) translateY(20px);
+  background: var(--ink);
+  color: #ffffff;
+  padding: 12px 16px 12px 20px;
+  border-radius: var(--radius-pill);
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 14px;
+  font-weight: 500;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25), 0 4px 12px rgba(0, 0, 0, 0.15);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  z-index: 1100;
+  max-width: calc(100vw - 40px);
+}
+
+.toast.visible {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+  pointer-events: auto;
+}
+
+.toast .toast-msg {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+
+.toast .undo-btn {
+  background: transparent;
+  color: var(--brand-light);
+  border: none;
+  font-family: 'Manrope', sans-serif;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 6px 12px;
+  border-radius: var(--radius-pill);
+  transition: background 0.15s, color 0.15s;
+  flex-shrink: 0;
+}
+
+.toast .undo-btn:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #ffffff;
+}
+
 /* === MODAL === */
 .modal-overlay {
   position: fixed;
@@ -1347,6 +1402,12 @@ input, select { font-family: inherit; }
   </div>
 </div>
 
+<!-- Toast for undo notifications -->
+<div id="toast" class="toast" role="status" aria-live="polite">
+  <span class="toast-msg" id="toast-msg"></span>
+  <button class="undo-btn" id="toast-undo">Undo</button>
+</div>
+
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script>
@@ -1381,6 +1442,62 @@ let groups = [];
 let markerMap = {};
 let currentProfileName = 'default';
 
+// === Toast / undo ===
+let toastTimeoutId = null;
+let activeUndoFn = null;
+
+function showToast(message, undoFn) {
+  const toast = document.getElementById('toast');
+  const msgEl = document.getElementById('toast-msg');
+  const undoBtn = document.getElementById('toast-undo');
+  if (!toast) return;
+
+  if (toastTimeoutId) clearTimeout(toastTimeoutId);
+
+  msgEl.textContent = message;
+  activeUndoFn = undoFn || null;
+  undoBtn.style.display = undoFn ? '' : 'none';
+
+  toast.classList.add('visible');
+  toastTimeoutId = setTimeout(hideToast, 5000);
+}
+
+function hideToast() {
+  const toast = document.getElementById('toast');
+  if (toast) toast.classList.remove('visible');
+  if (toastTimeoutId) {
+    clearTimeout(toastTimeoutId);
+    toastTimeoutId = null;
+  }
+  activeUndoFn = null;
+}
+
+// Wired up after DOM is parsed (the script runs at the bottom of body so
+// elements exist by now).
+document.getElementById('toast-undo').addEventListener('click', () => {
+  if (activeUndoFn) activeUndoFn();
+  hideToast();
+});
+
+// Deep clone for undo snapshots — keeps the prior state independent of any
+// later mutations to selectedStations / groups.
+function snapshotProfileState() {
+  return {
+    selectedStations: JSON.parse(JSON.stringify(selectedStations)),
+    groups: JSON.parse(JSON.stringify(groups)),
+  };
+}
+
+function restoreProfileState(snapshot) {
+  // Clear current marker colors so any stations not in the snapshot become unselected
+  selectedStations.forEach(s => updateMarkerColor(s.id, false));
+  selectedStations = snapshot.selectedStations;
+  groups = snapshot.groups;
+  selectedStations.forEach(s => updateMarkerColor(s.id, true));
+  renderSidebar();
+  saveCurrentProfile();
+}
+
 const selectedColor = '#2d8f3f';
 const defaultColor = '#015CAB';
 
@@ -1401,6 +1518,9 @@ function saveCurrentProfile() {
   const profiles = loadAllProfiles();
   profiles[currentProfileName] = { selectedStations, groups };
   saveAllProfiles(profiles);
+  // Refresh the profile dropdown so the station count next to each name
+  // stays in sync with the user's edits.
+  renderProfileSelect();
 }
 
 function loadProfile(name) {
@@ -1422,9 +1542,13 @@ function renderProfileSelect() {
     names.push('default');
     saveAllProfiles({ 'default': { selectedStations: [], groups: [] } });
   }
-  select.innerHTML = names.map(n =>
-    '<option value="' + escapeAttr(n) + '"' + (n === currentProfileName ? ' selected' : '') + '>' + escapeHtml(n) + '</option>'
-  ).join('');
+  select.innerHTML = names.map(n => {
+    const data = profiles[n] || {};
+    const count = (data.selectedStations || []).length;
+    const suffix = count === 0 ? ' · empty' : (count === 1 ? ' · 1 station' : ' · ' + count + ' stations');
+    const label = n + suffix;
+    return '<option value="' + escapeAttr(n) + '"' + (n === currentProfileName ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
+  }).join('');
   document.getElementById('btn-delete-profile').disabled = names.length <= 1;
 }
 
@@ -1495,12 +1619,28 @@ document.getElementById('btn-delete-profile').addEventListener('click', () => {
   const profiles = loadAllProfiles();
   const names = Object.keys(profiles);
   if (names.length <= 1) return;
-  delete profiles[currentProfileName];
+
+  const deletedName = currentProfileName;
+  // Snapshot the deleted profile so we can restore it on undo. We capture
+  // the persisted state, not the in-memory mutations, so unsaved edits
+  // don't accidentally come back.
+  const deletedData = JSON.parse(JSON.stringify(profiles[deletedName]));
+
+  delete profiles[deletedName];
   saveAllProfiles(profiles);
   selectedStations.forEach(s => updateMarkerColor(s.id, false));
   currentProfileName = Object.keys(profiles)[0];
   loadProfile(currentProfileName);
   renderProfileSelect();
+
+  showToast('Deleted profile "' + deletedName + '"', () => {
+    const current = loadAllProfiles();
+    current[deletedName] = deletedData;
+    saveAllProfiles(current);
+    currentProfileName = deletedName;
+    loadProfile(deletedName);
+    renderProfileSelect();
+  });
 });
 
 // === MAP ===
@@ -1607,6 +1747,10 @@ function addStation(stationId) {
 }
 
 function removeStation(stationId) {
+  const removed = selectedStations.find(s => s.id === stationId);
+  if (!removed) return;
+  const snapshot = snapshotProfileState();
+
   groups.forEach(g => {
     g.memberIds = g.memberIds.filter(id => id !== stationId);
   });
@@ -1615,6 +1759,8 @@ function removeStation(stationId) {
   updateMarkerColor(stationId, false);
   renderSidebar();
   saveCurrentProfile();
+
+  showToast('Removed ' + removed.displayName, () => restoreProfileState(snapshot));
 }
 
 function updateMarkerColor(stationId, selected) {
@@ -1730,21 +1876,33 @@ function toggleGroupExpand(arrowEl) {
 }
 
 function removeGroup(groupId) {
+  const group = groups.find(g => g.id === groupId);
+  if (!group) return;
+  const snapshot = snapshotProfileState();
+
   groups = groups.filter(g => g.id !== groupId);
   renderSidebar();
   saveCurrentProfile();
+
+  showToast('Ungrouped ' + group.name, () => restoreProfileState(snapshot));
 }
 
 function removeFromGroup(groupId, stationId) {
   const g = groups.find(gr => gr.id === groupId);
-  if (g) {
-    g.memberIds = g.memberIds.filter(id => id !== stationId);
-    if (g.memberIds.length === 0) {
-      groups = groups.filter(gr => gr.id !== groupId);
-    }
+  if (!g) return;
+  const member = selectedStations.find(s => s.id === stationId);
+  const snapshot = snapshotProfileState();
+
+  g.memberIds = g.memberIds.filter(id => id !== stationId);
+  if (g.memberIds.length === 0) {
+    groups = groups.filter(gr => gr.id !== groupId);
   }
   renderSidebar();
   saveCurrentProfile();
+
+  if (member) {
+    showToast('Removed ' + member.displayName + ' from group', () => restoreProfileState(snapshot));
+  }
 }
 
 function updateGroupButton() {
