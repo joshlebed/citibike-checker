@@ -17,12 +17,12 @@ eggs/
 venv/
 ENV/
 
-# User config (keep config.example.json)
-config.json
-src/config.json
+# User config
+josh-profiles.json
 
-# Generated files
+# Generated files (but not docs/)
 *.html
+!docs/**
 
 # AWS SAM
 .aws-sam/

@@ -17,7 +17,7 @@ Resources:
       StageName: prod
       Cors:
         AllowMethods: "'GET,POST,OPTIONS'"
-        AllowHeaders: "'Content-Type,X-API-Key'"
+        AllowHeaders: "'Content-Type'"
         AllowOrigin: "'*'"
 
   # Log groups with retention policy
@@ -44,12 +44,12 @@ Resources:
         Variables:
           GBFS_TIMEOUT_S: "8"
       Events:
-        GetCitibikeCheck:
+        PostCitibikeCheck:
           Type: Api
           Properties:
             RestApiId: !Ref CitibikeApi
             Path: /citibike-check
-            Method: GET
+            Method: POST
 
   CitibikeCheckEnglishFunction:
     Type: AWS::Serverless::Function

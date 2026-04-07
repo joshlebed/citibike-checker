@@ -18,4 +18,4 @@ build-backend = "hatchling.build"
 packages = ["src/citibike_parking"]
 
 [dependency-groups]
-dev = []
+dev = ["pytest>=8.0"]
