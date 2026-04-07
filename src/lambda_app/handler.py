@@ -18,6 +18,16 @@ LOW_AVAILABILITY_THRESHOLD = 3
 MAX_PROFILE_ENTRIES = 100
 MAX_STATION_IDS = 200
 
+# CORS headers attached to every Lambda response. The OPTIONS preflight is
+# handled by API Gateway's mock integration (configured in template.yaml),
+# but the actual POST response also needs Access-Control-Allow-Origin or
+# the browser blocks it after the preflight succeeds.
+CORS_HEADERS = {
+    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Methods": "POST, OPTIONS",
+}
+
 
 @dataclass
 class StationData:
@@ -131,12 +141,12 @@ def _bad_request(message: str, content_type: str):
     if content_type == "text/plain":
         return {
             "statusCode": 400,
-            "headers": {"content-type": "text/plain"},
+            "headers": {"content-type": "text/plain", **CORS_HEADERS},
             "body": f"Error: {message}",
         }
     return {
         "statusCode": 400,
-        "headers": {"content-type": "application/json"},
+        "headers": {"content-type": "application/json", **CORS_HEADERS},
         "body": json.dumps({"error": message}),
     }
 
@@ -458,7 +468,7 @@ def citibike_check(event, context):
         logger.error(f"Error processing request: {e}", exc_info=True)
         return {
             "statusCode": 500,
-            "headers": {"content-type": "application/json"},
+            "headers": {"content-type": "application/json", **CORS_HEADERS},
             "body": json.dumps({"error": "internal error"}),
         }
 
@@ -467,6 +477,7 @@ def citibike_check(event, context):
         "headers": {
             "content-type": "application/json; charset=utf-8",
             "cache-control": "no-store",
+            **CORS_HEADERS,
         },
         "body": json.dumps(data),
     }
@@ -503,7 +514,7 @@ def citibike_check_english(event, context):
         logger.error(f"Error processing request: {e}", exc_info=True)
         return {
             "statusCode": 500,
-            "headers": {"content-type": "text/plain"},
+            "headers": {"content-type": "text/plain", **CORS_HEADERS},
             "body": "Error: internal error",
         }
 
@@ -512,6 +523,7 @@ def citibike_check_english(event, context):
         "headers": {
             "content-type": "text/plain; charset=utf-8",
             "cache-control": "no-store",
+            **CORS_HEADERS,
         },
         "body": message,
     }

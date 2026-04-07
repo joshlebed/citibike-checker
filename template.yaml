@@ -168,10 +168,10 @@ Resources:
               Address: !Ref BudgetEmail
 
   # WAFv2 Web ACL with a rate-based rule. WAF inspects requests before they
-  # reach API Gateway and blocks IPs sending more than 100 requests in any
+  # reach API Gateway and blocks IPs sending more than 500 requests in any
   # 5-minute window. Blocked requests do not incur API Gateway charges,
-  # which protects against billing-amplification DDoS where an attacker
-  # hammers the URL with invalid API keys.
+  # which protects against billing-amplification DDoS while leaving plenty
+  # of headroom for legitimate Shortcut and web app testing from a single IP.
   CitibikeWebACL:
     Type: AWS::WAFv2::WebACL
     Properties:
@@ -191,7 +191,7 @@ Resources:
             Block: {}
           Statement:
             RateBasedStatement:
-              Limit: 100
+              Limit: 500
               AggregateKeyType: IP
           VisibilityConfig:
             SampledRequestsEnabled: true
