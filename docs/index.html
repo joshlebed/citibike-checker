@@ -136,7 +136,7 @@ let groups = []; // { id, name, memberIds: [], primary }
 let markerMap = {}; // stationId -> marker
 
 const selectedColor = '#43a047';
-const defaultColor = '#1976d2';
+const defaultColor = '#e65100';
 
 // Init map
 const map = L.map('map').setView([40.7580, -73.9785], 14);
@@ -158,11 +158,11 @@ fetch('stations.json')
     stations = data;
     data.forEach(station => {
       const marker = L.circleMarker([station.lat, station.lon], {
-        radius: 5,
-        color: defaultColor,
+        radius: 7,
+        color: '#fff',
         fillColor: defaultColor,
-        fillOpacity: 0.7,
-        weight: 1
+        fillOpacity: 0.9,
+        weight: 2
       });
       marker.stationId = station.id;
       marker.stationName = station.name;
