@@ -19,8 +19,6 @@ The server is stateless — your station config lives in each Shortcut, not on t
 
 ## API Endpoints
 
-All endpoints require an API key passed in the `x-api-key` header. See [Authentication](#authentication) below.
-
 ### `POST /citibike-check-english` (Plain text for Siri)
 
 Returns a human-readable sentence.
@@ -29,7 +27,6 @@ Returns a human-readable sentence.
 curl -sS "https://YOUR_API_URL/prod/citibike-check-english" \
   -X POST \
   -H "Content-Type: application/json" \
-  -H "x-api-key: YOUR_API_KEY" \
   -d '{
     "q": "docks",
     "profile": [
@@ -96,40 +93,20 @@ Prerequisites: AWS SAM CLI, Docker, AWS credentials.
 BUDGET_EMAIL=you@example.com ./deploy.sh
 ```
 
-The script prints the API Gateway URL and the primary API key after deployment. Save the key — you'll add it to each Siri Shortcut as an `x-api-key` header. AWS Budgets will email you a confirmation link the first time the budget is created; click it to start receiving alerts.
+The script prints the API Gateway URL after deployment. AWS Budgets will email you a confirmation link the first time the budget is created; click it to start receiving alerts.
 
 The station picker web app is in `docs/` and can be hosted on GitHub Pages or any static hosting.
 
-## Authentication
+## Cost controls
 
-The API rejects all requests without a valid `x-api-key` header. Cost controls layered in:
+The API is public — no auth required. Cost and abuse are bounded by layered defenses:
 
-- **Per-key quota:** 200 requests/day per API key
-- **Per-key throttle:** 2 req/sec, burst 5
-- **Stage throttle:** 5 req/sec, burst 10 across all callers
-- **Account-wide Lambda cap:** AWS default of 10 concurrent executions across the account (no per-function reservation needed at this scale; raise via Service Quotas if you ever need it)
-- **AWS Budget alarm:** monthly cap (default $5) with email alerts
-
-### Retrieve your API key
-
-The deploy script prints it for you. To re-fetch it later:
-
-```bash
-KEY_ID=$(aws cloudformation describe-stacks --stack-name citibike-checker \
-  --query "Stacks[0].Outputs[?OutputKey=='PrimaryApiKeyId'].OutputValue" --output text)
-aws apigateway get-api-key --api-key "$KEY_ID" --include-value --query value --output text
-```
-
-### Add the key to your Siri Shortcut
-
-In the **Get Contents of URL** action, add a second header alongside `Content-Type`:
-
-- **Key:** `x-api-key`
-- **Value:** *your API key*
-
-### Adding more keys (e.g. for friends/family)
-
-Edit `template.yaml` and duplicate `PrimaryApiKey` + `PrimaryApiKeyAssociation` with new logical names (e.g. `AliceApiKey`, `AliceApiKeyAssociation`). Add a matching `Outputs` entry, redeploy, then fetch the new key value with the same command above. To revoke a key, delete the resources or set `Enabled: false`.
+- **WAF rate cap:** AWS WAFv2 blocks any IP sending more than 100 requests in any 5-minute window, *before* the request reaches API Gateway billing. This is the primary protection against billing-amplification DDoS.
+- **Stage throttle:** 5 requests/sec, burst 10 across all callers (API Gateway rejects excess at the edge)
+- **Account-wide Lambda cap:** AWS default of 10 concurrent executions across the account
+- **Request hardening:** profile entries capped at 100; total station IDs capped at 200; GBFS feeds cached 5 seconds per warm Lambda container; exception detail stripped from 500 responses
+- **Short log retention:** 1 day on both Lambda log groups
+- **AWS Budget alarm:** monthly cap (default $5) with email alerts at 50%, 80%, and forecasted 100%
 
 ## Development
 
