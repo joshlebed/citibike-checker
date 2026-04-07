@@ -106,17 +106,18 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-
       <div id="instructions">
         <h4>Siri Shortcut Setup</h4>
         <ol>
-          <li>Open the Shortcuts app, tap +</li>
+          <li>Open the Shortcuts app, tap <strong>+</strong></li>
           <li>Name it (e.g., "Citi bike work docks")</li>
+          <li>Add action: <strong>Text</strong> -- paste the JSON config from above into the text block</li>
           <li>Add action: <strong>Get Contents of URL</strong>
             <ul>
               <li>URL: <code id="instr-url"></code></li>
-              <li>Method: POST</li>
-              <li>Headers: Content-Type = application/json</li>
-              <li>Request Body: JSON -- paste the config from above</li>
+              <li>Method: <strong>POST</strong></li>
+              <li>Headers: add key <code>Content-Type</code> with value <code>application/json</code></li>
+              <li>Request Body: change to <strong>File</strong>, then tap the field and select <strong>Text</strong> (the output from step 3)</li>
             </ul>
           </li>
-          <li>Add action: <strong>Speak Text</strong> -- speak the result</li>
+          <li>Add action: <strong>Speak Text</strong> -- set it to speak the result from step 4</li>
           <li>Done! Trigger with "Hey Siri, Citi bike work docks"</li>
         </ol>
       </div>
