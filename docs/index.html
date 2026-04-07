@@ -1073,6 +1073,41 @@ input, select { font-family: inherit; }
 }
 
 /* === LEAFLET CUSTOM === */
+
+/* Marker cluster restyle: white pill-badge with brand-blue border so
+   clusters are visually distinct from individual blue station markers. */
+.marker-cluster {
+  background: rgba(255, 255, 255, 0.96) !important;
+  border: 2.5px solid var(--brand) !important;
+  border-radius: 50% !important;
+  box-shadow: 0 2px 8px rgba(1, 92, 171, 0.18);
+}
+
+.marker-cluster:hover {
+  background: var(--brand-bg) !important;
+}
+
+.marker-cluster div {
+  background: transparent !important;
+  color: var(--brand-dark) !important;
+  font-family: 'Manrope', sans-serif !important;
+  font-weight: 800 !important;
+  font-size: 13px !important;
+  letter-spacing: -0.01em;
+}
+
+.marker-cluster span {
+  line-height: inherit !important;
+}
+
+/* Size variants — keep them obviously larger than the 14px station dots */
+.marker-cluster-small { width: 36px !important; height: 36px !important; }
+.marker-cluster-small div { width: 30px !important; height: 30px !important; margin: 1px !important; line-height: 30px !important; }
+.marker-cluster-medium { width: 42px !important; height: 42px !important; }
+.marker-cluster-medium div { width: 36px !important; height: 36px !important; margin: 1px !important; line-height: 36px !important; }
+.marker-cluster-large { width: 50px !important; height: 50px !important; }
+.marker-cluster-large div { width: 44px !important; height: 44px !important; margin: 1px !important; line-height: 44px !important; }
+
 .station-tooltip {
   background: var(--ink) !important;
   color: var(--bg) !important;
@@ -1543,6 +1578,19 @@ function pulseMarker(stationId) {
   setTimeout(() => marker.setStyle({ radius: originalRadius }), 200);
 }
 
+// Convert official Citi Bike station names ("E 43 St & Madison Ave") into
+// something Siri-friendly when read aloud ("43 & Madison Ave"). The user can
+// always override the displayName in the sidebar.
+function shortenStationName(name) {
+  return name
+    // Drop directional prefix when it's followed by a number ("E 43" -> "43")
+    .replace(/\b[EWNS] (\d)/g, '$1')
+    // Drop trailing " St" on numbered or named streets, leaving "Ave"/"Blvd"/etc
+    .replace(/ St\b/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function addStation(stationId) {
   const station = stations.find(s => s.id === stationId);
   if (!station || selectedStations.some(s => s.id === stationId)) return;
@@ -1550,7 +1598,7 @@ function addStation(stationId) {
   selectedStations.push({
     id: station.id,
     name: station.name,
-    displayName: station.name,
+    displayName: shortenStationName(station.name),
     primary: totalCount < 2
   });
   updateMarkerColor(stationId, true);
