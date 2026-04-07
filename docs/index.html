@@ -2051,15 +2051,41 @@ function pulseMarker(stationId) {
   setTimeout(() => marker.setStyle({ radius: originalRadius }), 200);
 }
 
+// Convert "1" -> "1st", "2" -> "2nd", "11" -> "11th", "21" -> "21st", etc.
+function toOrdinal(n) {
+  const num = parseInt(n, 10);
+  const last2 = num % 100;
+  if (last2 >= 11 && last2 <= 13) return num + 'th';
+  const last1 = num % 10;
+  if (last1 === 1) return num + 'st';
+  if (last1 === 2) return num + 'nd';
+  if (last1 === 3) return num + 'rd';
+  return num + 'th';
+}
+
 // Convert official Citi Bike station names ("E 43 St & Madison Ave") into
-// something Siri-friendly when read aloud ("43 & Madison Ave"). The user can
-// always override the displayName in the sidebar.
+// something Siri can pronounce cleanly ("43rd Street & Madison Ave"). The
+// goal is unambiguous spoken output, not the shortest possible string. The
+// user can always override displayName in the sidebar.
 function shortenStationName(name) {
   return name
-    // Drop directional prefix when it's followed by a number ("E 43" -> "43")
+    // 1. Strip cardinal direction prefix (E/W/N/S) when followed by a number
     .replace(/\b[EWNS] (\d)/g, '$1')
-    // Drop trailing " St" on numbered or named streets, leaving "Ave"/"Blvd"/etc
-    .replace(/ St\b/g, '')
+    // 2. "<number> St" -> "<ordinal> Street"
+    .replace(/\b(\d+) St\b/g, (_, num) => toOrdinal(num) + ' Street')
+    // 3. "<number> Ave" -> "<ordinal> Ave" (Ave stays abbreviated by design)
+    .replace(/\b(\d+) Ave\b/g, (_, num) => toOrdinal(num) + ' Ave')
+    // 4. Expand " St" -> " Street" only at end of a token, so "St Marks Pl"
+    //    (Saint) stays untouched. Lookahead matches end-of-string or " &" / ","
+    .replace(/ St(?=$|\s*[&,])/g, ' Street')
+    // 5. Other common street type abbreviations expand the same way
+    .replace(/ Pl(?=$|\s*[&,])/g, ' Place')
+    .replace(/ Blvd(?=$|\s*[&,])/g, ' Boulevard')
+    .replace(/ Sq(?=$|\s*[&,])/g, ' Square')
+    .replace(/ Pkwy(?=$|\s*[&,])/g, ' Parkway')
+    .replace(/ Dr(?=$|\s*[&,])/g, ' Drive')
+    .replace(/ Rd(?=$|\s*[&,])/g, ' Road')
+    .replace(/ Ct(?=$|\s*[&,])/g, ' Court')
     .replace(/\s+/g, ' ')
     .trim();
 }
