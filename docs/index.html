@@ -782,27 +782,27 @@ input, select { font-family: inherit; }
 
 .modal-close {
   position: absolute;
-  top: 20px;
-  right: 24px;
-  background: var(--bg);
-  border: 1.5px solid var(--rule-strong);
-  width: 38px;
-  height: 38px;
-  font-size: 18px;
-  font-weight: 500;
+  top: 18px;
+  right: 18px;
+  background: var(--bg-soft);
+  border: none;
+  width: 40px;
+  height: 40px;
+  font-size: 20px;
+  font-weight: 600;
   display: flex;
   align-items: center;
   justify-content: center;
   transition: all 0.2s;
   border-radius: 50%;
-  color: var(--ink-soft);
+  color: var(--ink);
   line-height: 1;
+  z-index: 2;
 }
 
 .modal-close:hover {
   background: var(--ink);
   color: var(--bg);
-  border-color: var(--ink);
 }
 
 .modal-body {
@@ -1221,11 +1221,12 @@ input, select { font-family: inherit; }
 
 /* === MOBILE === */
 @media (max-width: 900px) {
+  /* Tablet-ish: stack header items but keep similar density */
   #header {
     flex-direction: column;
     align-items: flex-start;
-    gap: 14px;
-    padding: 16px 18px;
+    gap: 12px;
+    padding: 14px 18px;
   }
   .header-brand { width: 100%; }
   .header-profile { width: 100%; flex-wrap: wrap; }
@@ -1233,20 +1234,250 @@ input, select { font-family: inherit; }
 }
 
 @media (max-width: 768px) {
-  #search-bar {
-    flex-wrap: wrap;
-    padding: 12px 18px;
-    gap: 8px;
-  }
-  #address-input { flex: 1 0 100%; order: -1; }
+  /* iPhone-class: aggressive mobile layout. Compact header + search,
+     full-bleed map, and the sidebar becomes a draggable bottom sheet. */
 
-  #content { flex-direction: column; }
-  #map { height: 50vh; flex: none; }
-  #sidebar { width: 100%; flex: 1; border-left: none; border-top: 1px solid var(--rule); }
+  body {
+    overflow: hidden;
+    height: 100dvh;
+  }
+
+  #header {
+    flex-direction: row;
+    flex-wrap: nowrap;
+    gap: 10px;
+    padding: 10px 14px;
+    align-items: center;
+  }
+  .bike-icon { width: 28px; height: 28px; }
+  .header-brand { gap: 10px; flex: 1; min-width: 0; }
+  .header-title h1 { font-size: 17px; line-height: 1.15; }
+  .header-tag { display: none; }
+  /* Hide profile dropdown + actions in the header on mobile — they
+     move into the bottom sheet's profile bar. */
+  .header-profile { display: none; }
+
+  #search-bar {
+    padding: 10px 14px;
+    gap: 8px;
+    flex-wrap: nowrap;
+  }
+  #address-input {
+    flex: 1;
+    min-width: 0;
+    padding: 10px 14px;
+    font-size: 15px; /* >=16px prevents iOS auto-zoom on focus */
+  }
+  #btn-search { display: none; }
+  .search-btn.primary {
+    padding: 0 14px;
+    flex-shrink: 0;
+  }
+
+  #content {
+    flex-direction: column;
+    position: relative;
+  }
+  #map {
+    flex: 1;
+    height: auto;
+    min-height: 0;
+  }
+
+  /* === BOTTOM SHEET === */
+  #sidebar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: 100%;
+    height: auto;
+    max-height: 88vh;
+    background: var(--bg);
+    border-left: none;
+    border-top: none;
+    border-radius: 18px 18px 0 0;
+    box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.16);
+    z-index: 600;
+    transform: translateY(calc(100% - 86px));
+    transition: transform 0.32s cubic-bezier(0.2, 0.8, 0.2, 1);
+    flex-shrink: 0;
+  }
+
+  #sidebar.expanded {
+    transform: translateY(0);
+  }
+
+  /* Drag handle / peek bar */
+  .sheet-handle {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    padding: 8px 0 4px;
+    cursor: pointer;
+    flex-shrink: 0;
+    user-select: none;
+  }
+
+  .sheet-handle::before {
+    content: '';
+    width: 40px;
+    height: 4px;
+    background: var(--rule-strong);
+    border-radius: 2px;
+    margin-bottom: 6px;
+  }
+
+  /* Profile management row inside the sheet (mobile only) */
+  .sheet-profile-bar {
+    display: flex;
+    gap: 6px;
+    padding: 8px 16px 12px;
+    border-bottom: 1px solid var(--rule);
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .sheet-profile-bar #profile-select-mobile {
+    flex: 1;
+    min-width: 0;
+    appearance: none;
+    -webkit-appearance: none;
+    background: var(--bg);
+    color: var(--ink);
+    border: 1.5px solid var(--rule-strong);
+    padding: 8px 30px 8px 12px;
+    font-family: inherit;
+    font-weight: 600;
+    font-size: 13px;
+    border-radius: var(--radius-sm);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1L5 5L9 1' stroke='%232a2a2a' stroke-width='1.8' stroke-linecap='round' fill='none'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 10px center;
+  }
+
+  .sheet-profile-bar .icon-btn {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+    background: var(--bg);
+    color: var(--ink-soft);
+    border: 1.5px solid var(--rule-strong);
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    font-family: inherit;
+    font-weight: 600;
+    font-size: 14px;
+  }
+
+  .sheet-profile-bar .icon-btn:hover {
+    border-color: var(--brand);
+    color: var(--brand);
+  }
+
+  .sheet-profile-bar .icon-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* Sidebar header tightening on mobile */
+  .sidebar-header {
+    padding: 0 16px 12px;
+    border-bottom: 1px solid var(--rule);
+  }
+  .sidebar-header .eyebrow { display: none; }
+  .sidebar-header .title { font-size: 18px; }
+
+  .sidebar-actions {
+    padding: 10px 16px;
+  }
+  .sidebar-actions button {
+    padding: 11px 12px;
+    font-size: 13px;
+  }
+
+  #station-list {
+    padding: 12px 16px 24px;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  /* Quick-action floating bar visible only when sheet is collapsed */
+  .sheet-collapsed-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 18px 6px;
+    gap: 12px;
+  }
+
+  .sheet-collapsed-bar .label {
+    font-size: 14px;
+    font-weight: 700;
+    color: var(--ink);
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .sheet-collapsed-bar .label .accent {
+    color: var(--brand);
+  }
+
+  .sheet-collapsed-bar .quick-generate {
+    flex-shrink: 0;
+    padding: 8px 16px;
+    background: var(--brand);
+    color: var(--bg);
+    border: none;
+    border-radius: var(--radius-pill);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    cursor: pointer;
+  }
+
+  .sheet-collapsed-bar .quick-generate:disabled {
+    opacity: 0.35;
+    cursor: not-allowed;
+  }
+
+  /* Hide the sheet body content (header/actions/list) when collapsed,
+     show only the handle + collapsed bar. When expanded, swap. */
+  #sidebar:not(.expanded) .sheet-body { display: none; }
+  #sidebar.expanded .sheet-collapsed-bar { display: none; }
+
+  /* Map clicks dim the sheet but don't dismiss it; an explicit close is
+     handled by the handle / backdrop. */
+  .sheet-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.25);
+    z-index: 599;
+    display: none;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+  }
+  .sheet-backdrop.visible { display: block; opacity: 1; }
 
   .modal-header { padding: 28px 24px 18px; }
   .modal-body { padding: 0 24px 28px; }
   .config-cards { grid-template-columns: 1fr; }
+}
+
+/* On desktop, the sheet wrapper elements collapse to nothing */
+@media (min-width: 769px) {
+  .sheet-handle,
+  .sheet-profile-bar,
+  .sheet-collapsed-bar,
+  .sheet-backdrop { display: none; }
+  .sheet-body { display: contents; }
 }
 </style>
 </head>
@@ -1284,16 +1515,33 @@ input, select { font-family: inherit; }
 
 <div id="content">
   <div id="map"></div>
+  <div class="sheet-backdrop" id="sheet-backdrop"></div>
   <aside id="sidebar">
-    <div class="sidebar-header">
-      <div class="eyebrow">Profile</div>
-      <div class="title">Your stations <span class="count" id="station-count">· 0</span></div>
+    <!-- Mobile-only handle / collapsed peek bar -->
+    <div class="sheet-handle" id="sheet-handle"></div>
+    <div class="sheet-collapsed-bar">
+      <span class="label" id="sheet-collapsed-label">Tap stations on the map</span>
+      <button class="quick-generate" id="btn-generate-quick" disabled>Generate</button>
     </div>
-    <div class="sidebar-actions">
-      <button id="btn-group" disabled>Group</button>
-      <button id="btn-generate" disabled>Generate config</button>
+    <!-- Sheet body — visible on desktop always, on mobile only when expanded -->
+    <div class="sheet-body">
+      <!-- Mobile-only profile management row -->
+      <div class="sheet-profile-bar">
+        <select id="profile-select-mobile"></select>
+        <button class="icon-btn" id="btn-new-profile-mobile" title="New profile">+</button>
+        <button class="icon-btn" id="btn-rename-profile-mobile" title="Rename profile">✎</button>
+        <button class="icon-btn" id="btn-delete-profile-mobile" title="Delete profile">✕</button>
+      </div>
+      <div class="sidebar-header">
+        <div class="eyebrow">Profile</div>
+        <div class="title">Your stations <span class="count" id="station-count">· 0</span></div>
+      </div>
+      <div class="sidebar-actions">
+        <button id="btn-group" disabled>Group</button>
+        <button id="btn-generate" disabled>Generate config</button>
+      </div>
+      <div id="station-list"></div>
     </div>
-    <div id="station-list"></div>
   </aside>
 </div>
 
@@ -1536,20 +1784,30 @@ function loadProfile(name) {
 
 function renderProfileSelect() {
   const profiles = loadAllProfiles();
-  const select = document.getElementById('profile-select');
   const names = Object.keys(profiles);
   if (names.length === 0) {
     names.push('default');
     saveAllProfiles({ 'default': { selectedStations: [], groups: [] } });
   }
-  select.innerHTML = names.map(n => {
+  const optionsHtml = names.map(n => {
     const data = profiles[n] || {};
     const count = (data.selectedStations || []).length;
     const suffix = count === 0 ? ' · empty' : (count === 1 ? ' · 1 station' : ' · ' + count + ' stations');
     const label = n + suffix;
     return '<option value="' + escapeAttr(n) + '"' + (n === currentProfileName ? ' selected' : '') + '>' + escapeHtml(label) + '</option>';
   }).join('');
-  document.getElementById('btn-delete-profile').disabled = names.length <= 1;
+
+  // Update both the desktop dropdown and the mobile-sheet dropdown
+  ['profile-select', 'profile-select-mobile'].forEach(id => {
+    const sel = document.getElementById(id);
+    if (sel) sel.innerHTML = optionsHtml;
+  });
+
+  const tooFew = names.length <= 1;
+  ['btn-delete-profile', 'btn-delete-profile-mobile'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) btn.disabled = tooFew;
+  });
 }
 
 function initProfiles() {
@@ -1564,10 +1822,29 @@ function initProfiles() {
   renderProfileSelect();
 }
 
-document.getElementById('profile-select').addEventListener('change', function() {
+function onProfileSelectChange(value) {
   saveCurrentProfile();
-  loadProfile(this.value);
+  loadProfile(value);
   renderProfileSelect();
+}
+document.getElementById('profile-select').addEventListener('change', function() {
+  onProfileSelectChange(this.value);
+});
+const profileSelectMobile = document.getElementById('profile-select-mobile');
+if (profileSelectMobile) {
+  profileSelectMobile.addEventListener('change', function() {
+    onProfileSelectChange(this.value);
+  });
+}
+
+// Wire the mobile profile action buttons to the same handlers as desktop
+['btn-new-profile', 'btn-rename-profile', 'btn-delete-profile'].forEach(id => {
+  const mobileBtn = document.getElementById(id + '-mobile');
+  if (mobileBtn) {
+    mobileBtn.addEventListener('click', () => {
+      document.getElementById(id).click();
+    });
+  }
 });
 
 document.getElementById('btn-new-profile').addEventListener('click', () => {
@@ -1643,8 +1920,65 @@ document.getElementById('btn-delete-profile').addEventListener('click', () => {
   });
 });
 
+// === MOBILE BOTTOM SHEET ===
+const sidebarEl = document.getElementById('sidebar');
+const sheetBackdrop = document.getElementById('sheet-backdrop');
+const sheetHandle = document.getElementById('sheet-handle');
+const sheetCollapsedBar = document.querySelector('.sheet-collapsed-bar');
+const btnGenerateQuick = document.getElementById('btn-generate-quick');
+const sheetCollapsedLabel = document.getElementById('sheet-collapsed-label');
+
+function isMobileViewport() {
+  return window.matchMedia('(max-width: 768px)').matches;
+}
+
+function expandSheet() {
+  sidebarEl.classList.add('expanded');
+  sheetBackdrop.classList.add('visible');
+}
+
+function collapseSheet() {
+  sidebarEl.classList.remove('expanded');
+  sheetBackdrop.classList.remove('visible');
+}
+
+function toggleSheet() {
+  if (sidebarEl.classList.contains('expanded')) collapseSheet();
+  else expandSheet();
+}
+
+if (sheetHandle) sheetHandle.addEventListener('click', toggleSheet);
+if (sheetCollapsedBar) sheetCollapsedBar.addEventListener('click', (e) => {
+  // Don't expand if the user is tapping the inline Generate button
+  if (e.target.closest('#btn-generate-quick')) return;
+  if (!sidebarEl.classList.contains('expanded')) expandSheet();
+});
+if (sheetBackdrop) sheetBackdrop.addEventListener('click', collapseSheet);
+if (btnGenerateQuick) btnGenerateQuick.addEventListener('click', (e) => {
+  e.stopPropagation();
+  document.getElementById('btn-generate').click();
+});
+
+function updateSheetCollapsedBar() {
+  if (!sheetCollapsedLabel) return;
+  const count = selectedStations.length;
+  if (count === 0) {
+    sheetCollapsedLabel.textContent = 'Tap stations on the map';
+  } else {
+    sheetCollapsedLabel.innerHTML = 'Your stations <span class="accent">· ' + count + '</span>';
+  }
+  if (btnGenerateQuick) btnGenerateQuick.disabled = count === 0;
+}
+
 // === MAP ===
-const map = L.map('map', { zoomControl: true }).setView([40.7580, -73.9785], 14);
+const map = L.map('map', { zoomControl: true, tap: true }).setView([40.7580, -73.9785], 14);
+
+// On orientation change / resize, Leaflet needs to recompute tile layout.
+// This also fixes the case where the map is hidden initially (e.g. iOS Safari
+// chrome resizing) and tiles render at the wrong size.
+window.addEventListener('resize', () => {
+  if (map) map.invalidateSize();
+});
 L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
   subdomains: 'abcd',
@@ -1793,6 +2127,7 @@ function renderSidebar() {
         '<span class="empty-state-hint">Then click stations on the map to add them.</span>' +
       '</div>';
     btnGroup.disabled = true;
+    updateSheetCollapsedBar();
     return;
   }
 
@@ -1840,6 +2175,7 @@ function renderSidebar() {
 
   list.innerHTML = html;
   updateGroupButton();
+  updateSheetCollapsedBar();
 }
 
 function updateDisplayName(stationId, newName) {
