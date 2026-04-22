@@ -28,9 +28,9 @@ Resources:
         AllowMethods: "'GET,POST,OPTIONS'"
         AllowHeaders: "'Content-Type'"
         AllowOrigin: "'*'"
-      # No auth: API is public, protected by WAF rate limit + stage throttle
-      # + per-request hardening + monthly budget alarm. See CitibikeWebACL
-      # below and the Cost controls section in README.md for the full story.
+      # No auth: API is public, protected by stage throttle + account Lambda
+      # concurrency cap (10) + monthly budget alarm. WAF was removed to cut
+      # the $6/mo flat fee; see README Cost controls section for rationale.
       MethodSettings:
         - ResourcePath: "/*"
           HttpMethod: "*"
@@ -167,43 +167,6 @@ Resources:
             - SubscriptionType: EMAIL
               Address: !Ref BudgetEmail
 
-  # WAFv2 Web ACL with a rate-based rule. WAF inspects requests before they
-  # reach API Gateway and blocks IPs sending more than 500 requests in any
-  # 5-minute window. Blocked requests do not incur API Gateway charges,
-  # which protects against billing-amplification DDoS while leaving plenty
-  # of headroom for legitimate Shortcut and web app testing from a single IP.
-  CitibikeWebACL:
-    Type: AWS::WAFv2::WebACL
-    Properties:
-      Name: !Sub "${AWS::StackName}-webacl"
-      Description: Rate-limiting WAF for citibike-checker API Gateway
-      Scope: REGIONAL
-      DefaultAction:
-        Allow: {}
-      VisibilityConfig:
-        SampledRequestsEnabled: true
-        CloudWatchMetricsEnabled: true
-        MetricName: !Sub "${AWS::StackName}-webacl"
-      Rules:
-        - Name: RateLimitPerIP
-          Priority: 1
-          Action:
-            Block: {}
-          Statement:
-            RateBasedStatement:
-              Limit: 500
-              AggregateKeyType: IP
-          VisibilityConfig:
-            SampledRequestsEnabled: true
-            CloudWatchMetricsEnabled: true
-            MetricName: !Sub "${AWS::StackName}-rate-limit"
-
-  CitibikeWebACLAssociation:
-    Type: AWS::WAFv2::WebACLAssociation
-    Properties:
-      ResourceArn: !Sub "arn:aws:apigateway:${AWS::Region}::/restapis/${CitibikeApi}/stages/prod"
-      WebACLArn: !GetAtt CitibikeWebACL.Arn
-
 Outputs:
   ApiBaseUrl:
     Description: Base URL for the API Gateway stage
@@ -214,6 +177,3 @@ Outputs:
   CitibikeCheckEnglishEndpoint:
     Description: English endpoint
     Value: !Sub "https://${CitibikeApi}.execute-api.${AWS::Region}.amazonaws.com/prod/citibike-check-english"
-  WebAclArn:
-    Description: ARN of the WAFv2 WebACL protecting the API
-    Value: !GetAtt CitibikeWebACL.Arn

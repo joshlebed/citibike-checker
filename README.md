@@ -101,12 +101,13 @@ The station picker web app is in `docs/` and can be hosted on GitHub Pages or an
 
 The API is public — no auth required. Cost and abuse are bounded by layered defenses:
 
-- **WAF rate cap:** AWS WAFv2 blocks any IP sending more than 100 requests in any 5-minute window, *before* the request reaches API Gateway billing. This is the primary protection against billing-amplification DDoS.
-- **Stage throttle:** 5 requests/sec, burst 10 across all callers (API Gateway rejects excess at the edge)
+- **Stage throttle:** 5 requests/sec, burst 10 across all callers (API Gateway 429s excess at the edge). This is the primary ceiling on traffic reaching Lambda.
 - **Account-wide Lambda cap:** AWS default of 10 concurrent executions across the account
 - **Request hardening:** profile entries capped at 100; total station IDs capped at 200; GBFS feeds cached 5 seconds per warm Lambda container; exception detail stripped from 500 responses
 - **Short log retention:** 1 day on both Lambda log groups
 - **AWS Budget alarm:** monthly cap (default $5) with email alerts at 50%, 80%, and forecasted 100%
+
+WAF was previously attached ($5/mo WebACL + $1/mo per rule) but was removed: it was the dominant cost of the whole stack (~$6/mo flat) for a personal-scale API, and the remaining layers above bound the realistic attack surface. A sustained billing-amplification DDoS could still incur per-request API Gateway charges beyond the budget — if that becomes a concern, reattach a WAFv2 rate-based rule.
 
 ## Development
 
