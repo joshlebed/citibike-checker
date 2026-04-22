@@ -100,6 +100,30 @@ PLENTY_OF_BIKES = {
     "station-40th-west": {"ebikes": 2, "classic": 4},
 }
 
+LOW_EBIKES = {
+    "station-43rd": {"ebikes": 1, "classic": 3},
+    "station-gc-north": {"ebikes": 0, "classic": 10},
+    "station-gc-south": {"ebikes": 1, "classic": 6},
+    "station-40th-east": {"ebikes": 0, "classic": 5},
+    "station-40th-west": {"ebikes": 2, "classic": 4},
+}
+
+ZERO_EBIKES = {
+    "station-43rd": {"ebikes": 0, "classic": 3},
+    "station-gc-north": {"ebikes": 0, "classic": 10},
+    "station-gc-south": {"ebikes": 0, "classic": 6},
+    "station-40th-east": {"ebikes": 0, "classic": 5},
+    "station-40th-west": {"ebikes": 0, "classic": 4},
+}
+
+ZERO_BIKES = {
+    "station-43rd": {"ebikes": 0, "classic": 0},
+    "station-gc-north": {"ebikes": 0, "classic": 0},
+    "station-gc-south": {"ebikes": 0, "classic": 0},
+    "station-40th-east": {"ebikes": 0, "classic": 0},
+    "station-40th-west": {"ebikes": 0, "classic": 0},
+}
+
 
 class TestCitibikeCheckEnglish:
     def test_docks_default(self):
@@ -117,7 +141,7 @@ class TestCitibikeCheckEnglish:
         assert "27 docks at grand central" in resp["body"]
 
     def test_bikes_query(self):
-        """q=bikes returns bike counts."""
+        """q=bikes returns bike counts; early-stops when enough ebikes found."""
         event = make_event(profile=WORK_PROFILE, q="bikes")
         mock = make_mock_summary(PLENTY_OF_BIKES)
         with patch(
@@ -127,8 +151,9 @@ class TestCitibikeCheckEnglish:
 
             resp = citibike_check_english(event, None)
         assert resp["statusCode"] == 200
+        # 43rd has 5 ebikes (>= threshold), so we stop there
         assert "5 ebikes at 43rd and Madison" in resp["body"]
-        assert "12 ebikes at grand central" in resp["body"]
+        assert "grand central" not in resp["body"]
 
     def test_type_override(self):
         """Explicit type param overrides q."""
@@ -161,6 +186,66 @@ class TestCitibikeCheckEnglish:
 
         resp = citibike_check_english(event, None)
         assert resp["statusCode"] == 400
+
+    def test_bikes_skips_empty_racks(self):
+        """Stations with 0 ebikes are not mentioned."""
+        event = make_event(profile=WORK_PROFILE, q="bikes")
+        mock = make_mock_summary(LOW_EBIKES)
+        with patch(
+            "lambda_app.handler.compute_parking_summary", return_value=mock
+        ):
+            from lambda_app.handler import citibike_check_english
+
+            resp = citibike_check_english(event, None)
+        assert resp["statusCode"] == 200
+        assert "0 ebikes" not in resp["body"]
+
+    def test_bikes_low_ebikes_includes_backups(self):
+        """When primary ebikes are low, backup stations with ebikes appear."""
+        event = make_event(profile=WORK_PROFILE, q="bikes")
+        mock = make_mock_summary(LOW_EBIKES)
+        with patch(
+            "lambda_app.handler.compute_parking_summary", return_value=mock
+        ):
+            from lambda_app.handler import citibike_check_english
+
+            resp = citibike_check_english(event, None)
+        assert resp["statusCode"] == 200
+        # Primary: 43rd=1, gc-south=1 (gc-north skipped, 0 ebikes)
+        assert "1 ebikes at 43rd and Madison" in resp["body"]
+        assert "1 ebikes at grand central south" in resp["body"]
+        # Backup 40th-west has 2 ebikes, pushing accumulated to 4 >= 3 → stop
+        assert "2 ebikes at 40th west" in resp["body"]
+        # No classic fallback since accumulated >= 3
+        assert "classic" not in resp["body"]
+
+    def test_bikes_zero_ebikes_classic_fallback(self):
+        """When no ebikes anywhere, falls back to classic bikes."""
+        event = make_event(profile=WORK_PROFILE, q="bikes")
+        mock = make_mock_summary(ZERO_EBIKES)
+        with patch(
+            "lambda_app.handler.compute_parking_summary", return_value=mock
+        ):
+            from lambda_app.handler import citibike_check_english
+
+            resp = citibike_check_english(event, None)
+        assert resp["statusCode"] == 200
+        assert "ebikes" not in resp["body"]
+        assert "classic at 43rd and Madison" in resp["body"]
+        assert "classic at grand central" in resp["body"]
+
+    def test_bikes_no_bikes_at_all(self):
+        """When no bikes of any kind, returns clear message."""
+        event = make_event(profile=WORK_PROFILE, q="bikes")
+        mock = make_mock_summary(ZERO_BIKES)
+        with patch(
+            "lambda_app.handler.compute_parking_summary", return_value=mock
+        ):
+            from lambda_app.handler import citibike_check_english
+
+            resp = citibike_check_english(event, None)
+        assert resp["statusCode"] == 200
+        assert resp["body"] == "No bikes available"
 
 
 class TestCitibikeCheck:

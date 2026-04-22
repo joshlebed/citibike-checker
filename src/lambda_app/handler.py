@@ -287,52 +287,56 @@ def _format_bikes_english(entries: list[EntryResult]) -> str:
     Format bike availability as English sentence.
 
     Logic:
-    - Prioritize e-bikes
-    - Always report e-bikes for primary entries
-    - If total primary e-bikes < LOW_AVAILABILITY_THRESHOLD:
-      - Also report classic bikes
-      - Also include non-primary entries
-    - For groups: collapse if first station has e-bikes, expand if first is empty
+    - Walk entries in order (primary first, then backup)
+    - Skip stations with 0 ebikes
+    - Early stop once accumulated ebikes >= LOW_AVAILABILITY_THRESHOLD
+    - Fall back to classic bikes only if not enough ebikes found
+    - For groups: collapse if first station has ebikes, expand if first is empty
+      (skipping 0-ebike members in expanded view)
     """
     primary_entries = [e for e in entries if e.is_primary]
     backup_entries = [e for e in entries if not e.is_primary]
-
-    total_primary_ebikes = sum(e.total_ebikes for e in primary_entries)
-    include_classic = total_primary_ebikes < LOW_AVAILABILITY_THRESHOLD
-    include_backups = total_primary_ebikes < LOW_AVAILABILITY_THRESHOLD
-
-    entries_to_report = primary_entries + (backup_entries if include_backups else [])
+    all_entries = primary_entries + backup_entries
 
     parts = []
+    accumulated_ebikes = 0
 
-    # Report e-bikes
-    for entry in entries_to_report:
+    for entry in all_entries:
+        if accumulated_ebikes >= LOW_AVAILABILITY_THRESHOLD:
+            break
+
         if not entry.is_group:
-            parts.append(f"{entry.total_ebikes} ebikes at {entry.name}")
+            if entry.total_ebikes > 0:
+                parts.append(f"{entry.total_ebikes} ebikes at {entry.name}")
+                accumulated_ebikes += entry.total_ebikes
         else:
             if entry.first_has_ebikes:
                 parts.append(f"{entry.total_ebikes} ebikes at {entry.name}")
+                accumulated_ebikes += entry.total_ebikes
             else:
                 for station in entry.stations:
-                    parts.append(
-                        f"{station.ebikes} ebikes at {entry.name} {station.name}"
-                    )
+                    if accumulated_ebikes >= LOW_AVAILABILITY_THRESHOLD:
+                        break
+                    if station.ebikes > 0:
+                        parts.append(
+                            f"{station.ebikes} ebikes at {entry.name} {station.name}"
+                        )
+                        accumulated_ebikes += station.ebikes
 
-    # If low e-bikes, also report classic
-    if include_classic:
+    # Fall back to classic if not enough ebikes found anywhere
+    if accumulated_ebikes < LOW_AVAILABILITY_THRESHOLD:
         classic_parts = []
-        for entry in entries_to_report:
-            if not entry.is_group:
+        for entry in all_entries:
+            if entry.total_classic > 0:
                 classic_parts.append(f"{entry.total_classic} classic at {entry.name}")
-            else:
-                # For classic, just report total per group
-                classic_parts.append(f"{entry.total_classic} classic at {entry.name}")
-
         if classic_parts:
-            parts.append("also " + ", ".join(classic_parts))
+            if parts:
+                parts.append("also " + ", ".join(classic_parts))
+            else:
+                parts.extend(classic_parts)
 
     if not parts:
-        return "No stations configured"
+        return "No bikes available"
 
     return ", ".join(parts)
 
@@ -389,23 +393,26 @@ def _format_bikes_json(entries: list[EntryResult]) -> dict:
     """Format bike availability as JSON."""
     primary_entries = [e for e in entries if e.is_primary]
     backup_entries = [e for e in entries if not e.is_primary]
-
-    total_primary_ebikes = sum(e.total_ebikes for e in primary_entries)
-    include_backups = total_primary_ebikes < LOW_AVAILABILITY_THRESHOLD
-
-    entries_to_report = primary_entries + (backup_entries if include_backups else [])
+    all_entries = primary_entries + backup_entries
 
     stations = []
-    for entry in entries_to_report:
+    accumulated_ebikes = 0
+
+    for entry in all_entries:
+        if accumulated_ebikes >= LOW_AVAILABILITY_THRESHOLD:
+            break
+
         if not entry.is_group:
-            stations.append(
-                {
-                    "name": entry.name,
-                    "ebikes": entry.total_ebikes,
-                    "classic": entry.total_classic,
-                    "primary": entry.is_primary,
-                }
-            )
+            if entry.total_ebikes > 0:
+                stations.append(
+                    {
+                        "name": entry.name,
+                        "ebikes": entry.total_ebikes,
+                        "classic": entry.total_classic,
+                        "primary": entry.is_primary,
+                    }
+                )
+                accumulated_ebikes += entry.total_ebikes
         else:
             if entry.first_has_ebikes:
                 stations.append(
@@ -417,22 +424,30 @@ def _format_bikes_json(entries: list[EntryResult]) -> dict:
                         "collapsed": True,
                     }
                 )
+                accumulated_ebikes += entry.total_ebikes
             else:
                 for station in entry.stations:
-                    stations.append(
-                        {
-                            "name": f"{entry.name} {station.name}",
-                            "ebikes": station.ebikes,
-                            "classic": station.classic,
-                            "primary": entry.is_primary,
-                        }
-                    )
+                    if accumulated_ebikes >= LOW_AVAILABILITY_THRESHOLD:
+                        break
+                    if station.ebikes > 0:
+                        stations.append(
+                            {
+                                "name": f"{entry.name} {station.name}",
+                                "ebikes": station.ebikes,
+                                "classic": station.classic,
+                                "primary": entry.is_primary,
+                            }
+                        )
+                        accumulated_ebikes += station.ebikes
+
+    showing_backups = any(not s.get("primary", True) for s in stations)
+    showing_classic = accumulated_ebikes < LOW_AVAILABILITY_THRESHOLD
 
     return {
         "type": "bikes",
-        "total_primary_ebikes": total_primary_ebikes,
-        "showing_backups": include_backups,
-        "showing_classic": total_primary_ebikes < LOW_AVAILABILITY_THRESHOLD,
+        "total_primary_ebikes": sum(e.total_ebikes for e in primary_entries),
+        "showing_backups": showing_backups,
+        "showing_classic": showing_classic,
         "stations": stations,
     }
 
