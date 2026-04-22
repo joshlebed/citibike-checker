@@ -1,0 +1,63 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: |
+  One-time bootstrap: GitHub Actions OIDC provider + IAM role trusted to
+  deploy the citibike-checker stack from pushes to main. Deploy this once
+  manually, then CI/CD can update the main stack on every push.
+
+Parameters:
+  GitHubOwner:
+    Type: String
+    Default: joshlebed
+  GitHubRepo:
+    Type: String
+    Default: citibike-checker
+  GitHubBranch:
+    Type: String
+    Default: main
+
+Resources:
+  # Tells AWS to trust tokens issued by GitHub Actions. Only needs to exist
+  # once per account; if another stack already creates it, import instead.
+  GitHubOIDCProvider:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      # AWS validates the TLS cert chain since 2023; ThumbprintList is still
+      # required by the API but the actual value is ignored. We pass both
+      # historical GitHub thumbprints so older docs and checks pass.
+      ThumbprintList:
+        - 6938fd4d98bab03faadb97b34396831e3780aea1
+        - 1c58a3a8518e8759bf075b76b750d4f2df264fcd
+
+  # Role that GitHub Actions assumes via OIDC. Trust policy is scoped to a
+  # single repo + branch, so only pushes to main in this repo can deploy.
+  GitHubActionsDeployRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: github-actions-citibike-deploy
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: !Ref GitHubOIDCProvider
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                "token.actions.githubusercontent.com:aud": sts.amazonaws.com
+              StringLike:
+                "token.actions.githubusercontent.com:sub": !Sub "repo:${GitHubOwner}/${GitHubRepo}:ref:refs/heads/${GitHubBranch}"
+      # AdministratorAccess is broad, but the trust condition above means
+      # only this specific repo+branch can assume the role. Tighter scoping
+      # would require listing every service SAM touches (Lambda, IAM roles
+      # for Lambda execution, API Gateway, CloudFormation, CloudWatch, S3
+      # for artifacts, Budgets) — not worth the complexity here.
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+
+Outputs:
+  RoleArn:
+    Description: ARN to put in .github/workflows/deploy.yml role-to-assume
+    Value: !GetAtt GitHubActionsDeployRole.Arn

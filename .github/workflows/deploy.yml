@@ -1,0 +1,50 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: astral-sh/setup-uv@v3
+      - run: uv sync
+      - run: uv run pytest tests/ -v
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::590184113718:role/github-actions-citibike-deploy
+          aws-region: us-east-1
+      - uses: aws-actions/setup-sam@v2
+        with:
+          use-installer: true
+      - run: sam build
+      - run: |
+          sam deploy \
+            --stack-name citibike-checker \
+            --region us-east-1 \
+            --capabilities CAPABILITY_IAM \
+            --resolve-s3 \
+            --no-confirm-changeset \
+            --no-fail-on-empty-changeset \
+            --parameter-overrides \
+                BudgetEmail=${{ secrets.BUDGET_EMAIL }} \
+                BudgetMonthlyLimitUsd=5
