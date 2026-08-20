@@ -78,6 +78,16 @@ class EntryResult:
         return self.stations[0].ebikes > 0 if self.stations else False
 
 
+@dataclass
+class DockLine:
+    """One clause of dock output: a whole entry, or one member of a group."""
+
+    name: str
+    docks: int
+    is_primary: bool
+    collapsed: bool = False
+
+
 def _get_body(event) -> dict:
     """Parse JSON body from request. Handles string or dict body, returns {} on failure."""
     body = event.get("body")
@@ -244,42 +254,61 @@ def _process_profile(
     return results
 
 
-def _format_docks_english(entries: list[EntryResult]) -> str:
+def _select_dock_lines(entries: list[EntryResult]) -> list[DockLine]:
     """
-    Format dock availability as English sentence.
+    Pick which dock entries to report, in speaking order.
 
-    Logic:
-    - Always include primary entries
-    - Include non-primary if total primary docks <= LOW_AVAILABILITY_THRESHOLD
-    - For groups: collapse if first station has docks, expand if first is empty
+    - Primary entries first, then backups
+    - Skip entries with no docks
+    - Stop after the first entry with more than LOW_AVAILABILITY_THRESHOLD docks
+    - For groups: collapse to the total if the first station has docks, expand
+      if the first is empty (skipping 0-dock members in expanded view)
+
+    Shared by the English and JSON formatters so the two stay in sync.
     """
-    primary_entries = [e for e in entries if e.is_primary]
-    backup_entries = [e for e in entries if not e.is_primary]
+    ordered = [e for e in entries if e.is_primary] + [
+        e for e in entries if not e.is_primary
+    ]
 
-    total_primary_docks = sum(e.total_docks for e in primary_entries)
-    include_backups = total_primary_docks <= LOW_AVAILABILITY_THRESHOLD
-
-    entries_to_report = primary_entries + (backup_entries if include_backups else [])
-
-    parts = []
-    for entry in entries_to_report:
-        if not entry.is_group:
-            # Single station
-            parts.append(f"{entry.total_docks} docks at {entry.name}")
+    lines: list[DockLine] = []
+    for entry in ordered:
+        if not entry.is_group or entry.first_has_docks:
+            if entry.total_docks > 0:
+                lines.append(
+                    DockLine(
+                        name=entry.name,
+                        docks=entry.total_docks,
+                        is_primary=entry.is_primary,
+                        collapsed=entry.is_group,
+                    )
+                )
         else:
-            # Group
-            if entry.first_has_docks:
-                # First station has docks - report group total
-                parts.append(f"{entry.total_docks} docks at {entry.name}")
-            else:
-                # First station empty - report each individually
-                for station in entry.stations:
-                    parts.append(f"{station.docks} docks at {entry.name} {station.name}")
+            for station in entry.stations:
+                if station.docks > 0:
+                    lines.append(
+                        DockLine(
+                            name=f"{entry.name} {station.name}",
+                            docks=station.docks,
+                            is_primary=entry.is_primary,
+                        )
+                    )
+                    if station.docks > LOW_AVAILABILITY_THRESHOLD:
+                        break
 
-    if not parts:
-        return "No stations configured"
+        if lines and lines[-1].docks > LOW_AVAILABILITY_THRESHOLD:
+            break
 
-    return ", ".join(parts)
+    return lines
+
+
+def _format_docks_english(entries: list[EntryResult]) -> str:
+    """Format dock availability as an English sentence."""
+    lines = _select_dock_lines(entries)
+
+    if not lines:
+        return "No docks available"
+
+    return ", ".join(f"{line.docks} docks at {line.name}" for line in lines)
 
 
 def _format_bikes_english(entries: list[EntryResult]) -> str:
@@ -343,48 +372,19 @@ def _format_bikes_english(entries: list[EntryResult]) -> str:
 
 def _format_docks_json(entries: list[EntryResult]) -> dict:
     """Format dock availability as JSON."""
-    primary_entries = [e for e in entries if e.is_primary]
-    backup_entries = [e for e in entries if not e.is_primary]
-
-    total_primary_docks = sum(e.total_docks for e in primary_entries)
-    include_backups = total_primary_docks <= LOW_AVAILABILITY_THRESHOLD
-
-    entries_to_report = primary_entries + (backup_entries if include_backups else [])
+    lines = _select_dock_lines(entries)
 
     stations = []
-    for entry in entries_to_report:
-        if not entry.is_group:
-            stations.append(
-                {
-                    "name": entry.name,
-                    "docks": entry.total_docks,
-                    "primary": entry.is_primary,
-                }
-            )
-        else:
-            if entry.first_has_docks:
-                stations.append(
-                    {
-                        "name": entry.name,
-                        "docks": entry.total_docks,
-                        "primary": entry.is_primary,
-                        "collapsed": True,
-                    }
-                )
-            else:
-                for station in entry.stations:
-                    stations.append(
-                        {
-                            "name": f"{entry.name} {station.name}",
-                            "docks": station.docks,
-                            "primary": entry.is_primary,
-                        }
-                    )
+    for line in lines:
+        station = {"name": line.name, "docks": line.docks, "primary": line.is_primary}
+        if line.collapsed:
+            station["collapsed"] = True
+        stations.append(station)
 
     return {
         "type": "docks",
-        "total_primary": total_primary_docks,
-        "showing_backups": include_backups,
+        "total_primary": sum(e.total_docks for e in entries if e.is_primary),
+        "showing_backups": any(not s["primary"] for s in stations),
         "stations": stations,
     }
 

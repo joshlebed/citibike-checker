@@ -37,7 +37,8 @@ curl -sS "https://YOUR_API_URL/prod/citibike-check-english" \
       ]}
     ]
   }'
-# Output: 10 docks at 43rd and Madison, 27 docks at grand central
+# Output: 10 docks at 43rd and Madison
+# (stops there — 10 is above the threshold, so grand central isn't mentioned)
 ```
 
 ### `POST /citibike-check` (JSON)
@@ -70,18 +71,24 @@ Returns structured JSON with station data. Same request format.
 - `q`: `"docks"` or `"bikes"` (defaults to `"docks"`)
 - `type`: explicit override for `q`
 - `profile`: array of station entries (single stations or groups)
-- `primary: true`: always reported. Non-primary entries only shown when primary availability is low.
+- `primary: true`: reported first. Non-primary entries are only reached when the primaries don't have enough availability.
 
 ### Smart Reporting Logic
 
+Both modes walk entries in order — primaries first, then backups — and stop as
+soon as they hit a station with enough availability. You hear the shortest
+sentence that answers the question.
+
 **Docks:**
-- Primary entries always shown
-- If primary total <=3 docks, backup entries also shown
+- Stations with 0 docks are skipped entirely
+- Reporting stops after the first entry with more than 3 docks
 - Groups collapse to total if first station has availability; expand if first is empty
+- If every station is full: `No docks available`
 
 **Bikes:**
-- E-bikes prioritized over classic bikes
-- If primary e-bikes <3, also report classic bikes and backup stations
+- E-bikes prioritized over classic bikes; stations with 0 e-bikes are skipped
+- Reporting stops once the running e-bike total reaches 3
+- If fewer than 3 e-bikes anywhere, classic bikes are appended as a fallback
 
 ## Architecture
 

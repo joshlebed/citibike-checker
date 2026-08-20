@@ -89,7 +89,7 @@ def make_event(count_type: str) -> dict:
     return {"headers": {}, "body": json.dumps(body)}
 
 
-def run_test(name: str, station_data: dict, count_type: str, expected_contains: list, verbose: bool = False):
+def run_test(name: str, station_data: dict, count_type: str, expected_contains: list, verbose: bool = False, expected_absent: list = None):
     """Run a single test case."""
     from lambda_app.handler import citibike_check_english, citibike_check
 
@@ -106,7 +106,10 @@ def run_test(name: str, station_data: dict, count_type: str, expected_contains: 
         json_body = json.loads(json_response["body"])
 
         # Check expectations
-        passed = all(exp in body for exp in expected_contains)
+        absent = expected_absent or []
+        passed = all(exp in body for exp in expected_contains) and not any(
+            unexp in body for unexp in absent
+        )
         status = "✓" if passed else "✗"
 
         print(f"{status} {name}")
@@ -115,6 +118,8 @@ def run_test(name: str, station_data: dict, count_type: str, expected_contains: 
             print(f"  Output: {body}")
             if not passed:
                 print(f"  Expected to contain: {expected_contains}")
+                if absent:
+                    print(f"  Expected NOT to contain: {absent}")
             print(f"  JSON: {json.dumps(json_body, indent=4)}")
             print()
 
@@ -132,9 +137,9 @@ def main():
 
     results = []
 
-    # Test 1: Plenty of docks everywhere - should show primary only, collapsed
+    # Test 1: Plenty of docks everywhere - stops at the first station
     results.append(run_test(
-        "Plenty of docks - primary only, collapsed",
+        "Plenty of docks - stops at first primary",
         {
             "station-43rd": {"docks": 10},
             "station-gc-north": {"docks": 15},
@@ -143,28 +148,30 @@ def main():
             "station-40th-west": {"docks": 5},
         },
         "docks",
-        ["10 docks at 43rd and Madison", "27 docks at grand central"],
-        args.verbose
+        ["10 docks at 43rd and Madison"],
+        args.verbose,
+        expected_absent=["grand central", "40th"],
     ))
 
-    # Test 2: GC north empty, south has docks - should expand GC
+    # Test 2: 43rd full, GC north empty, south has docks - should expand GC
     results.append(run_test(
         "GC north empty - should expand group",
         {
-            "station-43rd": {"docks": 10},
+            "station-43rd": {"docks": 0},
             "station-gc-north": {"docks": 0},
             "station-gc-south": {"docks": 12},
             "station-40th-east": {"docks": 8},
             "station-40th-west": {"docks": 5},
         },
         "docks",
-        ["10 docks at 43rd and Madison", "0 docks at grand central north", "12 docks at grand central south"],
-        args.verbose
+        ["12 docks at grand central south"],
+        args.verbose,
+        expected_absent=["43rd and Madison", "grand central north", "40th"],
     ))
 
-    # Test 3: Primary low (<=3) - should show backups
+    # Test 3: Primary low (<=3) - cascades into backups
     results.append(run_test(
-        "Primary low (<=3) - should show backups",
+        "Primary low (<=3) - cascades to backups",
         {
             "station-43rd": {"docks": 1},
             "station-gc-north": {"docks": 2},
@@ -188,8 +195,9 @@ def main():
             "station-40th-west": {"docks": 5},
         },
         "docks",
-        ["0 docks at 43rd and Madison", "0 docks at grand central", "13 docks at 40th"],
-        args.verbose
+        ["13 docks at 40th"],
+        args.verbose,
+        expected_absent=["43rd and Madison", "grand central"],
     ))
 
     # Test 5: Everything empty
@@ -203,7 +211,7 @@ def main():
             "station-40th-west": {"docks": 0},
         },
         "docks",
-        ["0 docks at 43rd and Madison", "0 docks at grand central", "0 docks at 40th"],
+        ["No docks available"],
         args.verbose
     ))
 
@@ -212,9 +220,9 @@ def main():
     print("BIKES TESTS")
     print("=" * 60)
 
-    # Test 6: Plenty of ebikes - should show ebikes only, collapsed
+    # Test 6: Plenty of ebikes - stops at the first station
     results.append(run_test(
-        "Plenty of ebikes - ebikes only, collapsed",
+        "Plenty of ebikes - stops at first primary",
         {
             "station-43rd": {"ebikes": 5, "classic": 3},
             "station-gc-north": {"ebikes": 8, "classic": 10},
@@ -223,23 +231,25 @@ def main():
             "station-40th-west": {"ebikes": 2, "classic": 4},
         },
         "bikes",
-        ["5 ebikes at 43rd and Madison", "12 ebikes at grand central"],
-        args.verbose
+        ["5 ebikes at 43rd and Madison"],
+        args.verbose,
+        expected_absent=["grand central", "40th", "classic"],
     ))
 
-    # Test 7: GC north no ebikes - should expand
+    # Test 7: 43rd has no ebikes either, GC north empty - should expand GC
     results.append(run_test(
         "GC north no ebikes - should expand group",
         {
-            "station-43rd": {"ebikes": 5, "classic": 3},
+            "station-43rd": {"ebikes": 0, "classic": 3},
             "station-gc-north": {"ebikes": 0, "classic": 10},
             "station-gc-south": {"ebikes": 4, "classic": 6},
             "station-40th-east": {"ebikes": 3, "classic": 5},
             "station-40th-west": {"ebikes": 2, "classic": 4},
         },
         "bikes",
-        ["5 ebikes at 43rd and Madison", "0 ebikes at grand central north", "4 ebikes at grand central south"],
-        args.verbose
+        ["4 ebikes at grand central south"],
+        args.verbose,
+        expected_absent=["43rd and Madison", "grand central north", "40th"],
     ))
 
     # Test 8: Low ebikes (<3) - should show classic and backups
@@ -253,8 +263,9 @@ def main():
             "station-40th-west": {"ebikes": 2, "classic": 4},
         },
         "bikes",
-        ["1 ebikes at 43rd and Madison", "1 ebikes at grand central", "classic", "40th"],
-        args.verbose
+        ["1 ebikes at 43rd and Madison", "1 ebikes at grand central", "5 ebikes at 40th"],
+        args.verbose,
+        expected_absent=["classic"],
     ))
 
     # Test 9: No ebikes anywhere - should show classic
@@ -268,8 +279,9 @@ def main():
             "station-40th-west": {"ebikes": 0, "classic": 4},
         },
         "bikes",
-        ["0 ebikes at 43rd and Madison", "0 ebikes at grand central", "classic"],
-        args.verbose
+        ["5 classic at 43rd and Madison", "16 classic at grand central", "9 classic at 40th"],
+        args.verbose,
+        expected_absent=["ebikes"],
     ))
 
     print()

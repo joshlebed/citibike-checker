@@ -116,6 +116,22 @@ ZERO_EBIKES = {
     "station-40th-west": {"ebikes": 0, "classic": 4},
 }
 
+EMPTY_PRIMARY_DOCKS = {
+    "station-43rd": {"docks": 0},
+    "station-gc-north": {"docks": 0},
+    "station-gc-south": {"docks": 2},
+    "station-40th-east": {"docks": 8},
+    "station-40th-west": {"docks": 5},
+}
+
+ZERO_DOCKS = {
+    "station-43rd": {"docks": 0},
+    "station-gc-north": {"docks": 0},
+    "station-gc-south": {"docks": 0},
+    "station-40th-east": {"docks": 0},
+    "station-40th-west": {"docks": 0},
+}
+
 ZERO_BIKES = {
     "station-43rd": {"ebikes": 0, "classic": 0},
     "station-gc-north": {"ebikes": 0, "classic": 0},
@@ -127,7 +143,7 @@ ZERO_BIKES = {
 
 class TestCitibikeCheckEnglish:
     def test_docks_default(self):
-        """No q param defaults to docks."""
+        """No q param defaults to docks; stops at the first station above the threshold."""
         event = make_event(profile=WORK_PROFILE)
         mock = make_mock_summary(PLENTY_OF_DOCKS)
         with patch(
@@ -137,8 +153,39 @@ class TestCitibikeCheckEnglish:
 
             resp = citibike_check_english(event, None)
         assert resp["statusCode"] == 200
-        assert "10 docks at 43rd and Madison" in resp["body"]
-        assert "27 docks at grand central" in resp["body"]
+        # 43rd has 10 docks (> threshold), so nothing after it is mentioned
+        assert resp["body"] == "10 docks at 43rd and Madison"
+
+    def test_docks_cascades_past_empty_stations(self):
+        """Empty stations are skipped; reporting continues to the first good rack."""
+        event = make_event(profile=WORK_PROFILE)
+        mock = make_mock_summary(EMPTY_PRIMARY_DOCKS)
+        with patch(
+            "lambda_app.handler.compute_parking_summary", return_value=mock
+        ):
+            from lambda_app.handler import citibike_check_english
+
+            resp = citibike_check_english(event, None)
+        assert resp["statusCode"] == 200
+        # 43rd empty -> skipped. grand central group: first member empty, so it
+        # expands and reports south's 2 docks. Still <= threshold, so the 40th
+        # backup group reports its 13-dock total and ends the sentence.
+        assert resp["body"] == (
+            "2 docks at grand central south, 13 docks at 40th"
+        )
+
+    def test_docks_none_available(self):
+        """When every station is full, say so instead of 'No stations configured'."""
+        event = make_event(profile=WORK_PROFILE)
+        mock = make_mock_summary(ZERO_DOCKS)
+        with patch(
+            "lambda_app.handler.compute_parking_summary", return_value=mock
+        ):
+            from lambda_app.handler import citibike_check_english
+
+            resp = citibike_check_english(event, None)
+        assert resp["statusCode"] == 200
+        assert resp["body"] == "No docks available"
 
     def test_bikes_query(self):
         """q=bikes returns bike counts; early-stops when enough ebikes found."""
@@ -262,7 +309,28 @@ class TestCitibikeCheck:
         assert resp["statusCode"] == 200
         data = json.loads(resp["body"])
         assert data["type"] == "docks"
-        assert len(data["stations"]) > 0
+        assert data["stations"] == [
+            {"name": "43rd and Madison", "docks": 10, "primary": True}
+        ]
+        assert data["showing_backups"] is False
+        assert data["total_primary"] == 37
+
+    def test_docks_json_cascade(self):
+        """JSON endpoint mirrors the English walk-and-stop selection."""
+        event = make_event(profile=WORK_PROFILE)
+        mock = make_mock_summary(EMPTY_PRIMARY_DOCKS)
+        with patch(
+            "lambda_app.handler.compute_parking_summary", return_value=mock
+        ):
+            from lambda_app.handler import citibike_check
+
+            resp = citibike_check(event, None)
+        data = json.loads(resp["body"])
+        assert data["stations"] == [
+            {"name": "grand central south", "docks": 2, "primary": True},
+            {"name": "40th", "docks": 13, "primary": False, "collapsed": True},
+        ]
+        assert data["showing_backups"] is True
 
     def test_bikes_json(self):
         """JSON endpoint returns structured bikes data."""
