@@ -79,3 +79,46 @@ selection walk ignores it. So `total_primary: 37` alongside
 `showing_backups: true` is reachable (first primary full, walk stops before
 reaching the healthy one). Don't reintroduce the old
 `total_primary <= 3 → showing backups` inference on the consumer side.
+
+## if the deploy fails with "web identity token could not be validated"
+
+The GitHub OIDC provider is missing from the AWS account. Check
+**IAM → Identity providers** in the console — `token.actions.githubusercontent.com`
+should be listed alongside the AWS SSO SAML provider.
+
+**Do not trust CloudFormation here.** The `citibike-github-oidc` stack keeps
+reporting `CREATE_COMPLETE` for both the provider and the role even when the
+provider has been deleted out-of-band; the stack is drifted and has no way to
+notice. This happened between 2026-04-22 and 2026-08-20 and cost a long
+debugging detour — `describe-stack-resources` said the provider existed while
+IAM said otherwise.
+
+Recreate it (console: Add provider → OpenID Connect, or CloudShell):
+
+```bash
+aws iam create-open-id-connect-provider \
+  --url https://token.actions.githubusercontent.com \
+  --client-id-list sts.amazonaws.com \
+  --thumbprint-list 6938fd4d98bab03faadb97b34396831e3780aea1 \
+                    1c58a3a8518e8759bf075b76b750d4f2df264fcd
+```
+
+The ARN derives from the URL, so a recreated provider gets the identical ARN
+and the existing role's trust policy matches again with no edits. Then
+`gh workflow run deploy.yml` — no new commit needed.
+
+Note the error message is misleading: a *missing* provider produces
+"could not be validated", not "No OpenIDConnect provider found". A `sub`/`aud`
+mismatch in the trust policy would produce `AccessDenied` instead.
+
+## getting AWS credentials for this account
+
+The account (`590184113718`) has **IAM Identity Center** configured, so
+`aws configure sso` is the right path — not IAM access keys.
+
+Avoid root access keys specifically: session tokens derived from root
+credentials **cannot call IAM APIs** without MFA, which makes them useless for
+exactly the OIDC debugging above (STS and CloudFormation calls still work,
+which makes the failure confusing). CloudShell is unavailable to the root user
+but works for IAM/Identity Center sign-ins, and needs no local credentials at
+all.
