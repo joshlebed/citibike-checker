@@ -2143,6 +2143,7 @@ fetch('stations.json')
     });
     initProfiles();
     loadProfile(currentProfileName);
+    botModeInit();
   })
   .catch(err => {
     console.error('Failed to load stations:', err);
@@ -2600,6 +2601,92 @@ document.getElementById('btn-location').addEventListener('click', () => {
     err => alert('Could not get your location: ' + err.message)
   );
 });
+
+// === Bot mode ===
+// Opened from the iMessage bot's setup link (?bot=<number>&place=<name>, plus
+// optional near=<address> and cfg=<base64url racks>): the page edits one
+// place's racks and "Send to bot" hands them back as a pre-filled text.
+const botParams = new URLSearchParams(location.search);
+const BOT = botParams.get('bot') && botParams.get('place')
+  ? { number: botParams.get('bot'), place: botParams.get('place'), cfg: botParams.get('cfg'), near: botParams.get('near') }
+  : null;
+
+function b64urlEncode(str) {
+  return btoa(unescape(encodeURIComponent(str))).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function b64urlDecode(str) {
+  const padded = str.replace(/-/g, '+').replace(/_/g, '/') + '==='.slice((str.length + 3) % 4);
+  return decodeURIComponent(escape(atob(padded)));
+}
+
+// Turn a saved rack list (the same shape buildProfile() produces) back into
+// the page's selection state.
+function importBotRacks(racks) {
+  selectedStations.forEach(s => updateMarkerColor(s.id, false));
+  selectedStations = [];
+  groups = [];
+  const add = (id, displayName, primary) => {
+    const station = stations.find(s => s.id === id);
+    if (!station || selectedStations.some(s => s.id === id)) return false;
+    selectedStations.push({ id: id, name: station.name, displayName: displayName || shortenStationName(station.name), primary: !!primary });
+    return true;
+  };
+  racks.forEach((entry, i) => {
+    if (entry.id) {
+      add(entry.id, entry.name, entry.primary);
+    } else if (Array.isArray(entry.stations)) {
+      const memberIds = entry.stations.filter(s => add(s.id, s.name, false)).map(s => s.id);
+      if (memberIds.length) groups.push({ id: 'bot-group-' + i, name: entry.name, memberIds: memberIds, primary: !!entry.primary });
+    }
+  });
+  selectedStations.forEach(s => updateMarkerColor(s.id, true));
+}
+
+function botModeInit() {
+  if (!BOT) return;
+  document.getElementById('welcome-modal').classList.remove('visible');
+  currentProfileName = 'bot: ' + BOT.place;
+  loadProfile(currentProfileName);
+  if (BOT.cfg) {
+    try { importBotRacks(JSON.parse(b64urlDecode(BOT.cfg))); } catch (e) { console.error('Could not read the saved setup:', e); }
+  }
+  saveCurrentProfile();
+  renderSidebar();
+  ['btn-generate', 'btn-generate-quick'].forEach(id => {
+    const btn = document.getElementById(id);
+    if (btn) btn.textContent = 'Send to bot';
+  });
+  // Centre on the racks already chosen; otherwise try the address the person
+  // gave the bot, quietly (it is often an intersection the geocoder misses,
+  // and they can still search or use their location).
+  const first = selectedStations.length && stations.find(s => s.id === selectedStations[0].id);
+  if (first) {
+    map.setView([first.lat, first.lon], 16);
+  } else if (BOT.near) {
+    document.getElementById('address-input').value = BOT.near;
+    fetch('https://nominatim.openstreetmap.org/search?format=json&q=' + encodeURIComponent(BOT.near))
+      .then(r => r.json())
+      .then(results => { if (results.length) map.setView([parseFloat(results[0].lat), parseFloat(results[0].lon)], 16); })
+      .catch(() => {});
+  }
+}
+
+function sendToBot() {
+  const body = 'bikebot:' + BOT.place + ':' + b64urlEncode(JSON.stringify(buildProfile()));
+  // If Messages does not open (a desktop browser), the text is on the clipboard.
+  if (navigator.clipboard) navigator.clipboard.writeText(body).catch(() => {});
+  showToast('Opening Messages. If nothing opens, paste the copied text to ' + BOT.number + '.');
+  window.location.href = 'sms:' + BOT.number + '&body=' + encodeURIComponent(body);
+}
+
+// Capture phase, so in bot mode the Siri config dialog never opens.
+document.addEventListener('click', e => {
+  if (!BOT || !e.target.closest || !e.target.closest('#btn-generate')) return;
+  e.stopPropagation();
+  e.preventDefault();
+  if (selectedStations.length) sendToBot();
+}, true);
 </script>
 </body>
 </html>
