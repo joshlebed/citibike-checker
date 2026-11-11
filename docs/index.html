@@ -2105,7 +2105,9 @@ const map = L.map('map', { zoomControl: true, tap: true }).setView([40.7580, -73
 window.addEventListener('resize', () => {
   if (map) map.invalidateSize();
 });
-L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+// CARTO basemaps require a key since Sept 2026 (carto.com/basemaps/apikey).
+// It's a client-side key, public by design; free tier is 5M requests/month.
+L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png?key=cb1_5782_1_c32cd7c682f765414752fe5b', {
   attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
   subdomains: 'abcd',
   maxZoom: 20
